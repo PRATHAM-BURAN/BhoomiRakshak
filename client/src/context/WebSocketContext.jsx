@@ -69,8 +69,8 @@ export function WebSocketProvider({ children }) {
     function connect() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host || 'localhost:5000';
-      // In Vite dev mode, port 3000 proxies /ws to port 5000
-      const wsUrl = `${protocol}//${host}/ws`;
+      // Allows pointing to external WebSocket server (e.g. wss://backend.onrender.com/ws) or falls back to host
+      const wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${host}/ws`;
 
       ws = new WebSocket(wsUrl);
 

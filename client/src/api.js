@@ -1,6 +1,7 @@
 // BhoomiRakshak Centralized API Client
 
-const BASE_URL = '/api';
+export const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
 
 export function getAuthToken() {
   return localStorage.getItem('bhoomi_token');

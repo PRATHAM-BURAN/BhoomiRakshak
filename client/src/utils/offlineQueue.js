@@ -1,6 +1,8 @@
 // BhoomiRakshak Offline Storage & Queue Service
 // Utilizes browser IndexedDB to persist field and citizen reports in zero-connectivity terrain.
 // Automatically reconciles and synchronizes with the backend once telemetry/network pings return.
+import { BASE_URL } from '../api';
+
 
 const DB_NAME = 'BhoomiRakshakOfflineDB';
 const DB_VERSION = 1;
@@ -99,7 +101,7 @@ export async function syncOfflineQueue(token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const res = await fetch('/api/reports', {
+      const res = await fetch(`${BASE_URL}/reports`, {
         method: 'POST',
         headers,
         body: formData
