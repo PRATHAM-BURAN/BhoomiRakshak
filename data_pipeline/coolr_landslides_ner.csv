@@ -1,0 +1,9 @@
+event_id,latitude,longitude,event_date,district,state,source_name,trigger,ls_type,citation
+NASA_COOLR_LS_01,25.1834,92.9521,2022-05-14,Dima Hasao,Assam,NASA COOLR / GSI Landslide Inventory,Continuous Monsoon Downpour,Debris Slide,NASA Global Landslide Catalog / Assam SDMA Lumding-Badarpur rail failure
+NASA_COOLR_LS_02,25.5788,91.8933,2021-06-18,East Khasi Hills,Meghalaya,NASA COOLR / Meghalaya SDMA,Extreme Rainfall,Mudslide,NASA COOLR Event 10482 - Cherrapunji-Shillong Escarpment
+NASA_COOLR_LS_03,23.4735,93.3298,2023-07-02,Champhai,Mizoram,NASA COOLR / GSI,Monsoon Tropical Low,Rotational Rockslide,NASA COOLR Event 11924 - Indo-Burma Hill Range
+NASA_COOLR_LS_04,27.3389,88.6065,2023-10-04,East Sikkim,Sikkim,NASA COOLR / NDMA,GLOF & Heavy Rainfall,Debris Flow,NASA COOLR Event 12401 - Teesta Valley Inundation
+NASA_COOLR_LS_05,25.6751,94.1086,2022-08-20,Kohima,Nagaland,NASA COOLR / Nagaland NSDMA,Heavy Monsoon Precipitation,Complex Slide,NASA COOLR Event 10982 - NH-29 Dimapur-Kohima Corridor
+NASA_COOLR_LS_06,27.0844,93.6053,2021-07-11,Papum Pare,Arunachal Pradesh,NASA COOLR / Border Roads Org,Cloudburst,Rockfall / Debris Avalanche,NASA COOLR Event 9871 - Itanagar Hill Slopes
+NASA_COOLR_LS_07,24.7937,93.9385,2022-06-30,Noney,Manipur,NASA COOLR / GSI,Continuous Heavy Downpour,Massive Debris Flow,NASA COOLR Event 11029 - Tupul Railway Camp Landslide
+NASA_COOLR_LS_08,23.8315,91.2868,2020-09-15,West Tripura,Tripura,NASA COOLR / Tripura SDMA,Depression Rainfall,Soil Creep / Slump,NASA COOLR Event 8940 - Baramura Hill Range

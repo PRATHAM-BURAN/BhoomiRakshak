@@ -1,0 +1,35 @@
+{
+  "model_name": "BhoomiRakshak-NER-RandomForest-v2.0",
+  "trained_at": "2026-09-08T11:20:25.851241Z",
+  "dataset_source": "NASA COOLR Landslides + GPM IMERG Rain + SRTM 30m DEM + NER Controls",
+  "total_samples": 2470,
+  "positive_samples": 1235,
+  "negative_samples": 1235,
+  "features": [
+    "rain_30min",
+    "rain_3h",
+    "rain_24h",
+    "rain_7d",
+    "slope_deg",
+    "elevation_m",
+    "historical_landslide_density",
+    "satellite_change_proxy"
+  ],
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "roc_auc": 1.0
+  },
+  "feature_importances": {
+    "satellite_change_proxy": 0.3316,
+    "historical_landslide_density": 0.2358,
+    "slope_deg": 0.2021,
+    "elevation_m": 0.1782,
+    "rain_24h": 0.0305,
+    "rain_7d": 0.0185,
+    "rain_3h": 0.003,
+    "rain_30min": 0.0004
+  }
+}
