@@ -19,12 +19,21 @@ import { queueOfflineReport } from '../utils/offlineQueue';
 import { api } from '../api';
 import SmsVerificationCard from '../components/SmsVerificationCard';
 
-export default function FieldOfficerApp({ regions = [], onReportSubmitted }) {
+export default function FieldOfficerApp({ regions = [], alerts = [], onReportSubmitted }) {
   const { user } = useAuth();
   const { isOnline, pendingSyncCount, triggerSync, refreshPendingCount } = useWebSocket();
 
   // Officer assigned region
   const assignedRegion = regions.find(r => r.id === user?.region_id) || regions[0] || null;
+
+  // Filter alerts relevant to this field commander's sector
+  const officerAlerts = alerts.filter(a => 
+    !assignedRegion || 
+    a.region_id === assignedRegion.id || 
+    (Array.isArray(a.region_ids) && a.region_ids.includes(assignedRegion.id)) ||
+    a.severity === 'CRITICAL' ||
+    a.severity === 'HIGH'
+  );
 
   // Form state
   const [reportType, setReportType] = useState('slope_movement');
@@ -166,6 +175,52 @@ export default function FieldOfficerApp({ regions = [], onReportSubmitted }) {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Active Sector Hazard Alerts (Live Real-Time Stream) */}
+      <div className="bg-white rounded border border-outline-variant/40 p-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-outline-variant/30 pb-2.5 mb-3">
+          <div className="flex items-center gap-2">
+            <Radio className="w-4 h-4 text-rose-600 animate-pulse" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-on-surface">
+              Sector Emergency Broadcasts ({officerAlerts.length})
+            </h2>
+          </div>
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">
+            Live Stream
+          </span>
+        </div>
+
+        {officerAlerts.length === 0 ? (
+          <div className="p-3 text-center text-xs text-on-surface-variant bg-surface-container-low rounded border border-outline-variant/20 italic">
+            No active emergency alerts for this operational sector.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2.5 max-h-56 overflow-y-auto">
+            {officerAlerts.map(alert => (
+              <div
+                key={alert.id}
+                className="p-3 bg-rose-50/70 border border-rose-200 rounded flex flex-col gap-1.5"
+              >
+                <div className="flex items-center justify-between">
+                  <SeverityChip severity={alert.severity} />
+                  <span className="text-[10px] font-mono text-on-surface-variant">
+                    {new Date(alert.created_at).toLocaleTimeString()}
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-rose-950 leading-snug">
+                  {alert.message}
+                </p>
+                {alert.action_recommendation && (
+                  <div className="text-[11px] font-semibold text-rose-800 flex items-center gap-1 mt-0.5">
+                    <span className="font-bold">Protocol:</span>
+                    <span>{alert.action_recommendation}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Officer Emergency SMS Registration & Verification Gateway */}

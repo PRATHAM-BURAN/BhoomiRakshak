@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test": "node src/scripts/smoke_test.js",
+    "verify": "node src/scripts/verify_integrations.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

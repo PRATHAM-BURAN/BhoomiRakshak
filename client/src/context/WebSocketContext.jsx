@@ -76,9 +76,13 @@ export function WebSocketProvider({ children }) {
 
       ws.onopen = () => {
         setWsConnected(true);
-        // Subscribe to user's assigned region if available
-        if (user?.region_id) {
-          ws.send(JSON.stringify({ action: 'subscribe_region', region_id: user.region_id }));
+        // Subscribe to user's assigned region(s) if available
+        if (user?.region_ids || user?.region_id) {
+          ws.send(JSON.stringify({
+            action: 'subscribe_region',
+            region_id: user.region_id || null,
+            region_ids: user.region_ids || (user.region_id ? [user.region_id] : [])
+          }));
         }
       };
 
@@ -87,11 +91,11 @@ export function WebSocketProvider({ children }) {
           const packet = JSON.parse(e.data);
           setLiveEvent(packet);
 
-          if (packet.event === 'new_alert') {
+          if (packet.event === 'new_alert' || packet.event === 'risk_notification') {
             setActiveNotification({
               type: 'alert',
-              severity: packet.data.severity,
-              message: `EMERGENCY ALERT: ${packet.data.message}`,
+              severity: packet.data?.severity || 'HIGH',
+              message: `EMERGENCY ALERT: ${packet.data?.message || 'Landslide hazard triggered'}`,
               data: packet.data
             });
           } else if (packet.event === 'new_report') {

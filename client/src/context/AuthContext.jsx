@@ -35,6 +35,13 @@ export function AuthProvider({ children }) {
     return res.user;
   };
 
+  const loginOtp = async (phone, otp) => {
+    const res = await api.loginOtp(phone, otp);
+    setAuthToken(res.token);
+    setUser(res.user);
+    return res.user;
+  };
+
   const setupAdmin = async (payload) => {
     const res = await api.setupAdmin(payload);
     setAuthToken(res.token);
@@ -62,6 +69,7 @@ export function AuthProvider({ children }) {
         isAuthenticated: Boolean(user),
         loading,
         login,
+        loginOtp,
         setupAdmin,
         registerCitizen,
         logout

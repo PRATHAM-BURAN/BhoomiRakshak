@@ -12,9 +12,11 @@ import {
   CheckCircle2, 
   KeyRound,
   ArrowRight,
-  ChevronDown
+  ChevronDown,
+  Send
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../api';
 
 // Default 8 Northeast Indian corridors guaranteed to be available even if backend load is delayed
 const DEFAULT_NER_REGIONS = [
@@ -29,17 +31,24 @@ const DEFAULT_NER_REGIONS = [
 ];
 
 export default function LoginModal({ isOpen, onClose, regions = [] }) {
-  const { login, setupAdmin, registerCitizen } = useAuth();
+  const { login, loginOtp, setupAdmin, registerCitizen } = useAuth();
   const [activeTab, setActiveTab] = useState('login'); // 'login' | 'setup-admin' | 'citizen-register'
+  const [loginMode, setLoginMode] = useState('password'); // 'password' | 'otp'
 
   // Determine active region list (fallback to standard 8 NER regions if regions prop is empty)
   const availableRegions = useMemo(() => {
     return (regions && regions.length > 0) ? regions : DEFAULT_NER_REGIONS;
   }, [regions]);
 
-  // Login inputs
+  // Login inputs (Password)
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+
+  // Login inputs (OTP)
+  const [otpPhone, setOtpPhone] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
 
   // Setup / Register inputs
   const [name, setName] = useState('');
@@ -77,6 +86,55 @@ export default function LoginModal({ isOpen, onClose, regions = [] }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  useEffect(() => {
+    if (otpCooldown > 0) {
+      const timer = setTimeout(() => setOtpCooldown(prev => prev - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [otpCooldown]);
+
+  const handleSendLoginOtp = async (e) => {
+    if (e) e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+    const raw = otpPhone.replace(/\D/g, '');
+    if (raw.length < 10) {
+      setErrorMsg('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await api.sendOtp(otpPhone);
+      setOtpSent(true);
+      setOtpCooldown(60);
+      setSuccessMsg(`OTP sent to +${res.phone || otpPhone}. Valid for 5 minutes.`);
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to dispatch verification OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyLoginOtp = async (e) => {
+    if (e) e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+    if (!otpCode || otpCode.trim().length !== 6) {
+      setErrorMsg('Please enter the complete 6-digit OTP code.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await loginOtp(otpPhone, otpCode.trim());
+      setSuccessMsg('Authentication successful!');
+      setTimeout(() => onClose(), 400);
+    } catch (err) {
+      setErrorMsg(err.message || 'Verification failed. Please check the OTP code.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -231,70 +289,177 @@ export default function LoginModal({ isOpen, onClose, regions = [] }) {
 
           {/* TAB 1: LOGIN */}
           {activeTab === 'login' && (
-            <form onSubmit={handleLoginSubmit} className="flex flex-col gap-3">
-              <div>
-                <label className="font-bold text-on-surface mb-1 block">Email or Mobile Number</label>
-                <div className="relative flex items-center">
-                  <Mail className="w-3.5 h-3.5 absolute left-3 text-on-surface-variant" />
-                  <input
-                    type="text"
-                    value={identifier}
-                    onChange={e => setIdentifier(e.target.value)}
-                    placeholder="admin@bhoomirakshak.gov.in or 9876543210"
-                    className="w-full h-9 pl-9 pr-3 bg-surface-container-low border border-outline-variant/40 rounded focus:outline-none focus:border-primary font-mono text-xs"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-on-surface mb-1 block">Password</label>
-                <div className="relative flex items-center">
-                  <Lock className="w-3.5 h-3.5 absolute left-3 text-on-surface-variant" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full h-9 pl-9 pr-3 bg-surface-container-low border border-outline-variant/40 rounded focus:outline-none focus:border-primary text-xs"
-                    required
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full mt-1 h-9 bg-primary hover:bg-primary-container text-white font-bold rounded flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>{loading ? 'Authenticating...' : 'Sign In to BhoomiRakshak'}</span>
-              </button>
-
-              {/* Quick Fill Demo Admin Button */}
-              <div className="mt-2 p-2.5 bg-surface-container-low border border-outline-variant/30 rounded flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-[11px] text-on-surface flex items-center gap-1">
-                    <KeyRound className="w-3 h-3 text-primary" />
-                    <span>Testing / Demo Clearance</span>
-                  </div>
-                  <div className="text-[10px] text-on-surface-variant">
-                    Master Administrator Account (Pre-configured)
-                  </div>
-                </div>
+            <div className="flex flex-col gap-3">
+              {/* Method Switcher: Password vs SMS OTP */}
+              <div className="flex bg-surface-container-low p-1 rounded border border-outline-variant/30 text-xs">
                 <button
                   type="button"
-                  onClick={fillAdminCredentials}
-                  className="px-2.5 py-1 bg-white border border-outline-variant/40 hover:border-primary text-primary font-bold rounded text-[11px] transition-colors shadow-xs"
+                  onClick={() => { setLoginMode('password'); setErrorMsg(''); setSuccessMsg(''); }}
+                  className={`flex-1 py-1 text-center font-bold rounded transition-colors ${loginMode === 'password' ? 'bg-white text-primary shadow-xs' : 'text-on-surface-variant hover:text-on-surface'}`}
                 >
-                  Quick Fill Admin
+                  Password Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setLoginMode('otp'); setErrorMsg(''); setSuccessMsg(''); }}
+                  className={`flex-1 py-1 text-center font-bold rounded transition-colors ${loginMode === 'otp' ? 'bg-white text-primary shadow-xs' : 'text-on-surface-variant hover:text-on-surface'}`}
+                >
+                  Mobile SMS OTP
                 </button>
               </div>
 
-              <p className="text-[11px] text-center text-on-surface-variant mt-1">
-                Authorized NDMA & Field Commander accounts are configured via institutional deployment.
-              </p>
-            </form>
+              {loginMode === 'password' ? (
+                <form onSubmit={handleLoginSubmit} className="flex flex-col gap-3">
+                  <div>
+                    <label className="font-bold text-on-surface mb-1 block">Email or Mobile Number</label>
+                    <div className="relative flex items-center">
+                      <Mail className="w-3.5 h-3.5 absolute left-3 text-on-surface-variant" />
+                      <input
+                        type="text"
+                        value={identifier}
+                        onChange={e => setIdentifier(e.target.value)}
+                        placeholder="admin@bhoomirakshak.gov.in or 9876543210"
+                        className="w-full h-9 pl-9 pr-3 bg-surface-container-low border border-outline-variant/40 rounded focus:outline-none focus:border-primary font-mono text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-on-surface mb-1 block">Password</label>
+                    <div className="relative flex items-center">
+                      <Lock className="w-3.5 h-3.5 absolute left-3 text-on-surface-variant" />
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full h-9 pl-9 pr-3 bg-surface-container-low border border-outline-variant/40 rounded focus:outline-none focus:border-primary text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-1 h-9 bg-primary hover:bg-primary-container text-white font-bold rounded flex items-center justify-center gap-1.5 transition-colors shadow-sm text-xs"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>{loading ? 'Authenticating...' : 'Sign In to BhoomiRakshak'}</span>
+                  </button>
+
+                  {/* Quick Fill Demo Admin Button */}
+                  <div className="mt-1 p-2.5 bg-surface-container-low border border-outline-variant/30 rounded flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-[11px] text-on-surface flex items-center gap-1">
+                        <KeyRound className="w-3 h-3 text-primary" />
+                        <span>Testing / Demo Clearance</span>
+                      </div>
+                      <div className="text-[10px] text-on-surface-variant">
+                        Master Administrator Account (Pre-configured)
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fillAdminCredentials}
+                      className="px-2.5 py-1 bg-white border border-outline-variant/40 hover:border-primary text-primary font-bold rounded text-[11px] transition-colors shadow-xs"
+                    >
+                      Quick Fill Admin
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="font-bold text-on-surface mb-1 block">Mobile Number (India / NER)</label>
+                    <div className="relative flex items-center">
+                      <Phone className="w-3.5 h-3.5 absolute left-3 text-on-surface-variant" />
+                      <input
+                        type="tel"
+                        value={otpPhone}
+                        onChange={e => setOtpPhone(e.target.value)}
+                        placeholder="e.g. 9021158105"
+                        className="w-full h-9 pl-9 pr-3 bg-surface-container-low border border-outline-variant/40 rounded focus:outline-none focus:border-primary font-mono text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {!otpSent ? (
+                    <button
+                      type="button"
+                      onClick={handleSendLoginOtp}
+                      disabled={loading}
+                      className="w-full h-9 bg-primary hover:bg-primary-container text-white font-bold rounded flex items-center justify-center gap-1.5 transition-colors shadow-sm text-xs"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{loading ? 'Dispatching OTP...' : 'Send 6-Digit Verification Code'}</span>
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-2.5">
+                      <div>
+                        <label className="font-bold text-on-surface mb-1 block">Enter 6-Digit OTP</label>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          value={otpCode}
+                          onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                          placeholder="123456"
+                          className="w-full h-9 px-3 bg-surface-container-low border border-outline-variant/40 rounded focus:outline-none focus:border-primary font-mono text-center tracking-widest text-sm font-bold"
+                          autoFocus
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleVerifyLoginOtp}
+                          disabled={loading || otpCode.length !== 6}
+                          className="flex-1 h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded flex items-center justify-center gap-1.5 transition-colors text-xs disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{loading ? 'Verifying...' : 'Verify OTP & Sign In'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSendLoginOtp}
+                          disabled={loading || otpCooldown > 0}
+                          className="px-3 h-9 bg-white border border-outline-variant/40 hover:border-primary text-primary font-bold rounded text-xs transition-colors disabled:opacity-50"
+                        >
+                          {otpCooldown > 0 ? `${otpCooldown}s` : 'Resend'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* QA Test Mode Quick Fill Numbers */}
+                  <div className="mt-1 p-2.5 bg-amber-50 border border-amber-200 rounded flex flex-col gap-1.5">
+                    <div className="font-bold text-[11px] text-amber-900 flex items-center gap-1">
+                      <KeyRound className="w-3 h-3 text-amber-700" />
+                      <span>QA Test Numbers (Real Device Verification)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setOtpPhone('9021158105'); setOtpSent(false); setOtpCode(''); }}
+                        className="flex-1 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-950 font-bold rounded text-[10px] transition-colors"
+                      >
+                        Admin: 9021158105
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setOtpPhone('9067372943'); setOtpSent(false); setOtpCode(''); }}
+                        className="flex-1 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-950 font-bold rounded text-[10px] transition-colors"
+                      >
+                        Officer: 9067372943
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* TAB 2: CITIZEN REGISTER */}

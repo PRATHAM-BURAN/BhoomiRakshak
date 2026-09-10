@@ -81,7 +81,7 @@ export default function CitizenPortal({ regions = [], alerts = [], onReportSubmi
   // Find active alerts for the selected filter
   const filteredAlerts = selectedFilterRegionId === 'ALL'
     ? alerts
-    : alerts.filter(a => a.region_id === selectedFilterRegionId);
+    : alerts.filter(a => a.region_id === selectedFilterRegionId || (Array.isArray(a.region_ids) && a.region_ids.includes(selectedFilterRegionId)));
 
   const activeRegionName = selectedFilterRegionId === 'ALL'
     ? 'All 8 Northeast Sectors'

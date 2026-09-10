@@ -54,12 +54,20 @@ wss.on('connection', (ws, req) => {
   wsClients.add(ws);
   console.log(`[WEBSOCKET] Client connected. Active clients: ${wsClients.size}`);
 
+  // Heartbeat ping interval to keep connection persistent through proxies
+  const pingInterval = setInterval(() => {
+    if (ws.readyState === 1) {
+      ws.ping();
+    }
+  }, 25000);
+
   // Handle optional region filter from client
   ws.on('message', (message) => {
     try {
       const parsed = JSON.parse(message);
-      if (parsed.action === 'subscribe_region' && parsed.region_id) {
-        ws.region_id = parsed.region_id;
+      if (parsed.action === 'subscribe_region') {
+        if (parsed.region_id) ws.region_id = parsed.region_id;
+        if (Array.isArray(parsed.region_ids)) ws.region_ids = parsed.region_ids;
       }
     } catch {
       // ignore non-json messages
@@ -67,11 +75,13 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
+    clearInterval(pingInterval);
     wsClients.delete(ws);
     console.log(`[WEBSOCKET] Client disconnected. Active clients: ${wsClients.size}`);
   });
 
   ws.on('error', (err) => {
+    clearInterval(pingInterval);
     console.error('[WEBSOCKET ERROR]:', err.message);
     wsClients.delete(ws);
   });

@@ -103,15 +103,24 @@ router.post('/send-otp', optionalAuth, async (req, res) => {
         });
 
         providerResponse = response.data;
-        providerSuccess = response.status >= 200 && response.status < 300;
-        console.log(`[MSG91 OTP API] Dispatched 6-digit OTP to +${normalizedPhone}:`, response.data);
+        providerSuccess = response.status >= 200 && response.status < 300 && response.data?.type !== 'error';
+        console.log(`[MSG91 OTP ATTEMPT] Dispatched OTP to +${normalizedPhone} | HTTP: ${response.status} | Response:`, JSON.stringify(response.data));
       } catch (apiErr) {
         const errData = apiErr.response?.data || apiErr.message;
-        console.warn(`[MSG91 OTP WARNING] Provider call failed for +${normalizedPhone}:`, errData);
+        console.error(`[MSG91 OTP ERROR] Provider call failed for +${normalizedPhone}:`, JSON.stringify(errData));
         providerResponse = errData;
       }
     } else {
       console.log(`[DEV OTP NOTIFICATION] MSG91 credentials not set in environment. Demo OTP for +${normalizedPhone} is: [ ${otp} ]`);
+    }
+
+    // If MSG91 failed and provider key was supplied, surface error honestly
+    if (msg91AuthKey && !providerSuccess) {
+      return res.status(502).json({
+        error: `SMS Gateway Delivery Failed: ${providerResponse?.message || (typeof providerResponse === 'string' ? providerResponse : 'MSG91 provider rejected request')}`,
+        provider_response: providerResponse,
+        phone: normalizedPhone
+      });
     }
 
     // Store hash with 5-minute expiry
@@ -222,16 +231,145 @@ router.post('/verify-otp', optionalAuth, async (req, res) => {
       }
     }
 
+    const token = updatedUser ? signToken(updatedUser) : null;
     return res.json({
       success: true,
       message: `Mobile number +${normalizedPhone} successfully verified. SMS early warning alerts are now ACTIVE.`,
       phone: normalizedPhone,
       phone_verified: true,
       sms_enabled: true,
-      user: updatedUser ? sanitizeUser(updatedUser) : null
+      user: updatedUser ? sanitizeUser(updatedUser) : null,
+      token
     });
   } catch (err) {
     console.error('[VERIFY-OTP EXCEPTION]:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/login-otp: Login or register directly via 6-digit SMS OTP
+router.post('/login-otp', async (req, res) => {
+  try {
+    const { phone, otp } = req.body;
+    if (!phone || !otp) {
+      return res.status(400).json({ error: 'Phone number and 6-digit OTP code are required.' });
+    }
+
+    const normalizedPhone = normalizePhoneNumber(phone);
+    const entry = otpStore.get(normalizedPhone);
+
+    if (!entry) {
+      return res.status(400).json({ error: 'No active OTP verification session found for this number. Please request an OTP.' });
+    }
+
+    if (Date.now() > entry.expiresAt) {
+      otpStore.delete(normalizedPhone);
+      return res.status(400).json({ error: 'The OTP has expired. Please request a new 6-digit code.' });
+    }
+
+    if (entry.attempts >= 5) {
+      otpStore.delete(normalizedPhone);
+      return res.status(400).json({ error: 'Too many incorrect attempts. For security, please request a new OTP.' });
+    }
+
+    // Check SHA-256 hash
+    const testHash = crypto.createHash('sha256').update(String(otp).trim() + entry.salt).digest('hex');
+    if (testHash !== entry.hash) {
+      entry.attempts += 1;
+      const remaining = 5 - entry.attempts;
+      return res.status(400).json({ error: `Incorrect OTP. ${remaining} attempt(s) remaining.` });
+    }
+
+    // Verification successful! Remove from store
+    otpStore.delete(normalizedPhone);
+
+    const users = localDB.getTable('users');
+
+    // Priority 2: QA Test Mode role routing
+    const isQaTestMode = process.env.QA_TEST_MODE === 'true' || process.env.TEST_MODE === 'true';
+    const testAdminPhone = normalizePhoneNumber(process.env.TEST_ADMIN_PHONE || '9021158105');
+    const testOfficerPhone = normalizePhoneNumber(process.env.TEST_FIELD_OFFICER_PHONE || '9067372943');
+
+    let targetUser = null;
+
+    if (isQaTestMode && normalizedPhone === testAdminPhone) {
+      targetUser = users.find(u => u.role === 'admin' && u.is_active !== false);
+      if (targetUser) {
+        targetUser.phone = normalizedPhone;
+        targetUser.phone_verified = true;
+        targetUser.sms_enabled = true;
+      }
+    } else if (isQaTestMode && normalizedPhone === testOfficerPhone) {
+      targetUser = users.find(u => u.role === 'field_officer' && u.is_active !== false);
+      if (targetUser) {
+        targetUser.phone = normalizedPhone;
+        targetUser.phone_verified = true;
+        targetUser.sms_enabled = true;
+      }
+    }
+
+    if (!targetUser) {
+      targetUser = users.find(u => u.phone && (
+        normalizePhoneNumber(u.phone) === normalizedPhone ||
+        u.phone.replace(/\D/g, '') === normalizedPhone.replace(/\D/g, '')
+      ));
+    }
+
+    // If still not found, auto-provision a verified citizen account
+    if (!targetUser) {
+      const regions = localDB.getTable('regions');
+      const defaultRegionId = regions[0]?.id || 'ad2a2d14-f0c0-42eb-ac4a-23a7a42abcf5';
+      const userId = uuidv4();
+
+      targetUser = {
+        id: userId,
+        role: 'citizen',
+        name: `Citizen (+${normalizedPhone.slice(-4)})`,
+        phone: normalizedPhone,
+        phone_verified: true,
+        sms_enabled: true,
+        email: `${normalizedPhone}@bhoomirakshak.local`,
+        password_hash: await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10),
+        region_id: defaultRegionId,
+        region_ids: [defaultRegionId],
+        language_pref: 'en',
+        is_active: true,
+        created_at: new Date().toISOString()
+      };
+
+      users.push(targetUser);
+    } else {
+      targetUser.phone_verified = true;
+      targetUser.sms_enabled = true;
+    }
+
+    localDB.save();
+
+    // Sync to Supabase profiles if configured
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('profiles').upsert({
+          id: targetUser.id,
+          role: targetUser.role,
+          full_name: targetUser.name,
+          phone: normalizedPhone,
+          phone_verified: true,
+          sms_enabled: true,
+          region_id: targetUser.region_id
+        });
+      } catch (sbErr) {
+        console.warn('[SUPABASE LOGIN-OTP SYNC]:', sbErr.message);
+      }
+    }
+
+    const token = signToken(targetUser);
+    return res.json({
+      message: `Authentication successful as ${targetUser.role.toUpperCase()}. Welcome, ${targetUser.name}!`,
+      user: sanitizeUser(targetUser),
+      token
+    });
+  } catch (err) {
+    console.error('[LOGIN-OTP EXCEPTION]:', err);
     return res.status(500).json({ error: err.message });
   }
 });

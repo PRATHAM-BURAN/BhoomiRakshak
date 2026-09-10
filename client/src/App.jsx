@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './context/AuthContext';
 import { useWebSocket } from './context/WebSocketContext';
 import { api } from './api';
+import { supabase } from './supabase';
 
 // Components
 import Navbar from './components/Navbar';
@@ -88,8 +89,25 @@ export default function App() {
   // Handle live WebSocket update events
   useEffect(() => {
     if (!liveEvent) return;
-    if (liveEvent.event === 'new_alert') {
-      setAlerts(prev => [liveEvent.data, ...prev]);
+    if (liveEvent.event === 'new_alert' && liveEvent.data) {
+      setAlerts(prev => {
+        if (!liveEvent.data.id || prev.some(a => a.id === liveEvent.data.id)) return prev;
+        return [liveEvent.data, ...prev];
+      });
+    } else if (liveEvent.event === 'risk_notification' && liveEvent.data) {
+      const alertId = liveEvent.data.alert_id || `alert_${Date.now()}`;
+      setAlerts(prev => {
+        if (prev.some(a => a.id === alertId)) return prev;
+        const newA = {
+          id: alertId,
+          severity: (liveEvent.data.severity || 'CRITICAL').toUpperCase(),
+          message: liveEvent.data.message,
+          action_recommendation: liveEvent.data.action_recommendation || 'Follow official NDMA advisory',
+          region_id: liveEvent.data.region_id || null,
+          created_at: liveEvent.data.timestamp || new Date().toISOString()
+        };
+        return [newA, ...prev];
+      });
     } else if (liveEvent.event === 'new_report') {
       setReports(prev => [liveEvent.data, ...prev]);
     } else if (liveEvent.event === 'risk_zone_updated') {
@@ -106,6 +124,34 @@ export default function App() {
       setReports(prev => prev.map(r => r.id === liveEvent.data.id ? liveEvent.data : r));
     }
   }, [liveEvent]);
+
+  // Dual-channel Supabase Realtime Subscription (survives any WebSocket hiccups)
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase
+      .channel('app-alerts-live')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'alerts' },
+        (payload) => {
+          if (payload.new) {
+            setAlerts(prev => {
+              if (prev.some(a => a.id === payload.new.id)) return prev;
+              const formatted = {
+                ...payload.new,
+                severity: (payload.new.severity || 'HIGH').toUpperCase()
+              };
+              return [formatted, ...prev];
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Enforce permitted views strictly on role changes
   useEffect(() => {
@@ -245,6 +291,7 @@ export default function App() {
           {currentView === 'field-officer' && (role === 'admin' || role === 'field_officer') && (
             <FieldOfficerApp
               regions={regions}
+              alerts={alerts}
               onReportSubmitted={(newRep) => {
                 setReports(prev => [newRep, ...prev]);
                 fetchData();

@@ -62,6 +62,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ identifier, password })
   }),
+  loginOtp: (phone, otp) => apiRequest('/auth/login-otp', {
+    method: 'POST',
+    body: JSON.stringify({ phone, otp })
+  }),
   setupAdmin: (payload) => apiRequest('/auth/setup-admin', {
     method: 'POST',
     body: JSON.stringify(payload)
@@ -143,6 +147,7 @@ export const api = {
 
   // NASA & SRTM Ground Truth Data Pipeline
   getPipelineStatus: () => apiRequest('/data-pipeline/status'),
+  getHistoricalLandslides: () => apiRequest('/data-pipeline/historical-landslides'),
   ingestPipelineData: () => apiRequest('/data-pipeline/ingest', { method: 'POST' }),
   trainMLModel: () => apiRequest('/data-pipeline/train-ml', { method: 'POST' }),
   // Database Live Explorer & Telemetry

@@ -257,12 +257,20 @@ export async function seedNERCommanders() {
   );
   const now = new Date().toISOString();
 
+  const isQaTestMode = process.env.QA_TEST_MODE === 'true' || process.env.TEST_MODE === 'true';
+  const effectiveAdminPhone = isQaTestMode && process.env.TEST_ADMIN_PHONE
+    ? `+91${process.env.TEST_ADMIN_PHONE.replace(/\D/g, '').slice(-10)}`
+    : adminDef.phone;
+  const effectiveOfficerPhone = isQaTestMode && process.env.TEST_FIELD_OFFICER_PHONE
+    ? `+91${process.env.TEST_FIELD_OFFICER_PHONE.replace(/\D/g, '').slice(-10)}`
+    : null;
+
   const adminRecord = {
     id: adminDef.id,
     role: 'admin',
     name: adminDef.name,
     email: adminDef.email,
-    phone: adminDef.phone,
+    phone: effectiveAdminPhone,
     phone_verified: true,
     sms_enabled: true,
     password_hash: adminHash,
@@ -289,7 +297,7 @@ export async function seedNERCommanders() {
         id: targetAdminId,
         role: 'admin',
         full_name: adminDef.name,
-        phone: adminDef.phone,
+        phone: effectiveAdminPhone,
         language_pref: 'en',
         sms_enabled: true,
         push_enabled: true
@@ -303,12 +311,13 @@ export async function seedNERCommanders() {
   // 3. Seed 8 Field Masters / Sector Commanders
   for (const cmdr of SEED_CREDENTIALS.commanders) {
     const cmdrHash = await bcrypt.hash(cmdr.password, 10);
+    const cmdrPhone = effectiveOfficerPhone || cmdr.phone;
     const cmdrRecord = {
       id: cmdr.id,
       role: 'field_officer',
       name: cmdr.name,
       email: cmdr.email,
-      phone: cmdr.phone,
+      phone: cmdrPhone,
       phone_verified: true,
       sms_enabled: true,
       password_hash: cmdrHash,
@@ -329,11 +338,11 @@ export async function seedNERCommanders() {
           id: cmdr.id,
           role: 'field_officer',
           full_name: cmdr.name,
-          phone: cmdr.phone,
+          phone: cmdrPhone,
           region_id: cmdr.region_id,
           language_pref: cmdr.language_pref,
-          sms_enabled: true,
-          push_enabled: true
+          phone_verified: true,
+          sms_enabled: true
         });
       } catch (err) {
         console.warn(`[SUPABASE] Commander '${cmdr.name}' sync note:`, err.message);

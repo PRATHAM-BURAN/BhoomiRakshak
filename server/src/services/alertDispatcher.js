@@ -108,12 +108,33 @@ export function broadcastWebSocketMessage(event, data) {
   for (const client of wsClients) {
     if (client.readyState === 1) { // WebSocket.OPEN
       try {
-        // If client has subscribed to a specific region, filter if applicable
-        if (!client.region_id || client.region_id === data.region_id || data.severity === 'CRITICAL') {
+        const clientRegion = client.region_id;
+        const clientRegions = Array.isArray(client.region_ids) && client.region_ids.length > 0
+          ? client.region_ids
+          : (clientRegion ? [clientRegion] : []);
+
+        const targetRegions = Array.isArray(data?.region_ids) && data.region_ids.length > 0
+          ? data.region_ids
+          : (data?.region_id ? [data.region_id] : []);
+
+        const isCriticalOrHigh = data?.severity === 'CRITICAL' || data?.severity === 'HIGH';
+
+        // Match if:
+        // 1. Client is global / un-scoped (e.g. Admin console, guest)
+        // 2. Alert targets all regions
+        // 3. Severity is CRITICAL or HIGH (emergency broadcast to entire network)
+        // 4. Client assigned corridor is in the alert target corridors
+        const matches = 
+          clientRegions.length === 0 ||
+          targetRegions.length === 0 ||
+          isCriticalOrHigh ||
+          clientRegions.some(cr => targetRegions.includes(cr));
+
+        if (matches) {
           client.send(messageStr);
         }
       } catch (err) {
-        console.error('Failed to send WebSocket message:', err.message);
+        console.error('[WEBSOCKET BROADCAST ERROR]:', err.message);
       }
     }
   }

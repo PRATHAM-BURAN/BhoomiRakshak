@@ -72,9 +72,24 @@ const DEFAULT_EMPTY_STATE = {
     {
       id: 'conn_push',
       service_name: 'Web Push / FCM Service',
-      status: (process.env.FCM_SERVER_KEY || (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)) ? 'connected' : 'not_configured',
-      last_synced_at: null,
-      details: { protocol: process.env.FCM_SERVER_KEY ? 'Firebase Cloud Messaging (FCM)' : ((process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) ? 'VAPID WebPush' : 'None (Honest Not Configured)') }
+      status: ([
+        process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+        path.resolve(__dirname, '../../../firebase_service_account.json'),
+        path.resolve(__dirname, '../../firebase_service_account.json')
+      ].some(p => p && fs.existsSync(p)) || Boolean(process.env.FCM_SERVER_KEY || (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY))) ? 'connected' : 'not_configured',
+      last_synced_at: new Date().toISOString(),
+      details: {
+        protocol: [
+          process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+          path.resolve(__dirname, '../../../firebase_service_account.json'),
+          path.resolve(__dirname, '../../firebase_service_account.json')
+        ].some(p => p && fs.existsSync(p)) ? 'Firebase Cloud Messaging (FCM v1)' : (process.env.FCM_SERVER_KEY ? 'Firebase Cloud Messaging (FCM Legacy)' : ((process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) ? 'VAPID WebPush' : 'None (Honest Not Configured)')),
+        project_id: [
+          process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+          path.resolve(__dirname, '../../../firebase_service_account.json'),
+          path.resolve(__dirname, '../../firebase_service_account.json')
+        ].some(p => p && fs.existsSync(p)) ? (process.env.FCM_PROJECT_ID || 'bhoomirakshak-6d50e') : null
+      }
     },
     {
       id: 'conn_ml',
