@@ -40,8 +40,17 @@ export async function apiRequest(endpoint, options = {}) {
   const data = isJson ? await response.json() : await response.text();
 
   if (!response.ok) {
-    const errorMsg = data && data.error ? data.error : `HTTP ${response.status}: ${response.statusText}`;
+    let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+    if (data && typeof data === 'object' && data.error) {
+      errorMsg = data.error;
+    } else if (typeof data === 'string' && !data.includes('<!DOCTYPE') && !data.includes('<html') && data.trim().length > 0) {
+      errorMsg = data;
+    }
     throw new Error(errorMsg);
+  }
+
+  if (typeof data === 'string' && (data.includes('<!DOCTYPE') || data.includes('<html'))) {
+    throw new Error('Server returned HTML instead of API data. Please ensure the backend is running and reachable.');
   }
 
   return data;

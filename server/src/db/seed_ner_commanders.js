@@ -278,8 +278,15 @@ export async function seedNERCommanders() {
 
   if (isSupabaseConfigured && supabase) {
     try {
+      const { data: existingAdminProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'admin')
+        .maybeSingle();
+
+      const targetAdminId = existingAdminProfile ? existingAdminProfile.id : adminDef.id;
       await supabase.from('profiles').upsert({
-        id: adminDef.id,
+        id: targetAdminId,
         role: 'admin',
         full_name: adminDef.name,
         phone: adminDef.phone,

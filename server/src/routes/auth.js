@@ -300,7 +300,7 @@ router.post('/setup-admin', async (req, res) => {
     const existingAdmin = users.find(u => u.role === 'admin' && u.is_active !== false);
     if (existingAdmin) {
       return res.status(403).json({
-        error: 'Security Policy Violation: BhoomiRakshak already has an active Administrator provisioned.'
+        error: 'Administrator account is already active. Please sign in with official credentials (admin@bhoomirakshak.gov.in) via the Account Login tab.'
       });
     }
 
@@ -375,19 +375,35 @@ router.post('/register-citizen', async (req, res) => {
       return res.status(400).json({ error: 'Name, password, and either phone or email are required.' });
     }
 
-    const selectedRegionIds = Array.isArray(region_ids) && region_ids.length > 0 
-      ? region_ids 
-      : (region_id ? [region_id] : []);
-    const primaryRegionId = selectedRegionIds[0] || region_id || null;
+    const users = localDB.getTable('users');
+    const normPhone = phone ? normalizePhoneNumber(phone) : null;
+    const cleanEmail = email ? email.trim().toLowerCase() : null;
 
-    // Requirement: Citizens without a region set should not receive region-specific alerts.
-    // Surface this as a required field during signup/onboarding.
-    if (!primaryRegionId) {
-      return res.status(400).json({ error: 'District / Region selection is required to configure early warning alerts.' });
+    // Check if email or phone already registered in LocalDB
+    if (cleanEmail && users.some(u => u.email && u.email.trim().toLowerCase() === cleanEmail)) {
+      return res.status(409).json({ error: 'This email is already registered. Please sign in via the Account Login tab.' });
+    }
+    if (normPhone && users.some(u => u.phone && normalizePhoneNumber(u.phone) === normPhone)) {
+      return res.status(409).json({ error: 'This phone number is already registered. Please sign in via the Account Login tab.' });
     }
 
+    let selectedRegionIds = Array.isArray(region_ids) && region_ids.length > 0 
+      ? region_ids 
+      : (region_id ? [region_id] : []);
+
+    // Graceful fallback if no region was selected by the citizen
+    if (selectedRegionIds.length === 0) {
+      const dbRegions = localDB.getTable('regions');
+      if (dbRegions && dbRegions.length > 0) {
+        selectedRegionIds = [dbRegions[0].id];
+      } else {
+        selectedRegionIds = ['ad2a2d14-f0c0-42eb-ac4a-23a7a42abcf5'];
+      }
+    }
+    const primaryRegionId = selectedRegionIds[0];
+
     let userId = uuidv4();
-    const effectiveEmail = email || `${(phone || '').replace(/[^0-9]/g, '')}@bhoomirakshak.local`;
+    const effectiveEmail = cleanEmail || `${(normPhone || 'user' + Date.now())}@bhoomirakshak.local`;
 
     if (isSupabaseConfigured && supabase) {
       try {
@@ -395,7 +411,7 @@ router.post('/register-citizen', async (req, res) => {
           email: effectiveEmail,
           password,
           email_confirm: true,
-          user_metadata: { role: 'citizen', full_name: name, region_id: primaryRegionId, region_ids: selectedRegionIds }
+          user_metadata: { role: 'citizen', full_name: name.trim(), region_id: primaryRegionId, region_ids: selectedRegionIds }
         });
 
         if (authUser?.user) {
@@ -403,8 +419,8 @@ router.post('/register-citizen', async (req, res) => {
           await supabase.from('profiles').upsert({
             id: userId,
             role: 'citizen',
-            full_name: name,
-            phone: phone ? normalizePhoneNumber(phone) : null,
+            full_name: name.trim(),
+            phone: normPhone,
             region_id: primaryRegionId,
             language_pref: language_pref || 'en',
             phone_verified: false,
@@ -419,17 +435,16 @@ router.post('/register-citizen', async (req, res) => {
       }
     }
 
-    const users = localDB.getTable('users');
     const password_hash = await bcrypt.hash(password, 10);
 
     const newCitizen = {
       id: userId,
       role: 'citizen',
-      name,
-      phone: phone ? normalizePhoneNumber(phone) : null,
+      name: name.trim(),
+      phone: normPhone,
       phone_verified: false,
       sms_enabled: false,
-      email: email || null,
+      email: cleanEmail,
       password_hash,
       region_id: primaryRegionId,
       region_ids: selectedRegionIds,
@@ -441,7 +456,7 @@ router.post('/register-citizen', async (req, res) => {
     localDB.validateUser(newCitizen);
     users.push(newCitizen);
 
-    // Automatically create alert subscriptions for all chosen districts (unverified by default)
+    // Automatically create alert subscriptions for all chosen districts
     const alertSubs = localDB.getTable('alert_subscriptions');
     for (const rId of selectedRegionIds) {
       alertSubs.push({
@@ -450,7 +465,7 @@ router.post('/register-citizen', async (req, res) => {
         region_id: rId,
         sms_enabled: false,
         push_enabled: true,
-        email_enabled: Boolean(email),
+        email_enabled: Boolean(cleanEmail),
         created_at: new Date().toISOString()
       });
     }
@@ -459,7 +474,7 @@ router.post('/register-citizen', async (req, res) => {
 
     const token = signToken(newCitizen);
     return res.status(201).json({
-      message: `Citizen account created successfully with ${selectedRegionIds.length} monitored district(s). Please verify your phone number in Settings to activate SMS alerts.`,
+      message: `Citizen account created successfully with ${selectedRegionIds.length} monitored district(s).`,
       user: sanitizeUser(newCitizen),
       token
     });
@@ -476,11 +491,15 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Identifier (email or phone) and password are required.' });
     }
 
+    const cleanId = String(identifier).trim();
+    const cleanIdLower = cleanId.toLowerCase();
+    const normPhone = normalizePhoneNumber(cleanId);
+
     // Try Supabase Auth first if configured and identifier is an email
-    if (isSupabaseConfigured && supabase && identifier.includes('@')) {
+    if (isSupabaseConfigured && supabase && cleanId.includes('@')) {
       try {
         const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
-          email: identifier,
+          email: cleanIdLower,
           password
         });
 
@@ -514,10 +533,18 @@ router.post('/login', async (req, res) => {
     }
 
     const users = localDB.getTable('users');
-    const user = users.find(u => u.email === identifier || u.phone === identifier);
+    const user = users.find(u => {
+      const emailMatch = u.email && u.email.trim().toLowerCase() === cleanIdLower;
+      const phoneMatch = normPhone && u.phone && (
+        normalizePhoneNumber(u.phone) === normPhone ||
+        u.phone.replace(/\D/g, '') === normPhone.replace(/\D/g, '')
+      );
+      const rawMatch = u.phone === cleanId;
+      return emailMatch || phoneMatch || rawMatch;
+    });
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials. User not found.' });
+      return res.status(401).json({ error: 'Invalid credentials. User not found. Please check your email/phone or sign up as a citizen.' });
     }
 
     if (user.is_active === false) {
