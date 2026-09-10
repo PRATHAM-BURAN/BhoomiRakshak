@@ -108,7 +108,12 @@ export default function LoginModal({ isOpen, onClose, regions = [] }) {
       const res = await api.sendOtp(otpPhone);
       setOtpSent(true);
       setOtpCooldown(60);
-      setSuccessMsg(`OTP sent to +${res.phone || otpPhone}. Valid for 5 minutes.`);
+      if (res.dev_otp) {
+        setOtpCode(res.dev_otp);
+        setSuccessMsg(`OTP sent to +${res.phone || otpPhone}. [Auto-filled Code: ${res.dev_otp}]`);
+      } else {
+        setSuccessMsg(`OTP sent to +${res.phone || otpPhone}. Valid for 5 minutes.`);
+      }
     } catch (err) {
       setErrorMsg(err.message || 'Failed to dispatch verification OTP.');
     } finally {

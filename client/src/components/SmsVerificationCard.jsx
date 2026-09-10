@@ -99,7 +99,12 @@ export default function SmsVerificationCard({ onStatusChange }) {
       const res = await api.sendOtp(phone);
       setOtpSent(true);
       setCooldown(60); // 60-second cooldown before resend
-      setSuccessMsg(`OTP sent successfully to ${res.phone || phone}. Please enter the 6-digit code.`);
+      if (res.dev_otp) {
+        setOtp(res.dev_otp);
+        setSuccessMsg(`OTP sent to +${res.phone || phone}. [Auto-filled Code: ${res.dev_otp}]`);
+      } else {
+        setSuccessMsg(`OTP sent successfully to ${res.phone || phone}. Please enter the 6-digit code.`);
+      }
     } catch (err) {
       setErrorMsg(err.message || 'Failed to send verification OTP.');
     } finally {

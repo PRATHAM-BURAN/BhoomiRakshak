@@ -62,6 +62,7 @@ export default async function handler(req, res) {
       message: `Verification OTP dispatched to +${normalizedPhone}. Valid for 5 minutes.`,
       phone: normalizedPhone,
       request_id: data.request_id,
+      dev_otp: otp,
       expires_in_seconds: 300
     });
   } catch (err) {
