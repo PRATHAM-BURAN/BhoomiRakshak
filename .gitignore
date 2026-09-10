@@ -20,9 +20,6 @@ credentials.json
 *.cert
 *.p12
 
-# --- Sensitive Credentials Documentation ---
-CREDENTIALS.md
-
 # --- Dependencies & Package Managers ---
 node_modules/
 */node_modules/
