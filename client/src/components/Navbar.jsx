@@ -78,11 +78,11 @@ export default function Navbar({
         <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-white shadow-sm shrink-0">
           <ShieldAlert className="w-5 h-5 text-emerald-400" />
         </div>
-        <div className="flex flex-col shrink-0">
-          <span className="font-bold text-sm sm:text-base tracking-tight text-on-surface leading-none whitespace-nowrap">
+        <div className="flex flex-col min-w-0">
+          <span className="font-bold text-sm sm:text-base tracking-tight text-on-surface leading-none truncate">
             BhoomiRakshak
           </span>
-          <span className="font-mono text-[9px] uppercase tracking-wider text-on-surface-variant font-semibold mt-0.5 whitespace-nowrap">
+          <span className="hidden sm:block font-mono text-[9px] uppercase tracking-wider text-on-surface-variant font-semibold mt-0.5 whitespace-nowrap">
             AI Landslide Sentinel • NER
           </span>
         </div>
@@ -121,14 +121,14 @@ export default function Navbar({
           onClick={handleRefresh}
           title="Force Telemetry Sync"
           aria-label="Force Telemetry Sync"
-          className="p-1.5 rounded bg-surface-container-low hover:bg-surface-container-high text-on-surface transition-colors border border-outline-variant/30 shrink-0 flex items-center justify-center shadow-xs"
+          className="p-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container-high text-on-surface transition-colors border border-outline-variant/30 shrink-0 flex items-center justify-center shadow-xs"
         >
           <RefreshCw className={`w-3.5 h-3.5 text-primary shrink-0 ${isRefreshing ? 'animate-spin' : ''}`} />
         </button>
 
-        {/* View Switcher strictly governed by User Role (Citizens CANNOT access Admin or Field Officer) */}
+        {/* View Switcher: Desktop/Tablet view only (Mobile users use BottomNav) */}
         {role === 'admin' ? (
-          <div className="relative flex items-center bg-primary text-white px-2.5 py-1 rounded text-xs font-semibold shadow-sm whitespace-nowrap shrink-0">
+          <div className="hidden md:flex relative items-center bg-primary text-white px-2.5 py-1 rounded text-xs font-semibold shadow-sm whitespace-nowrap shrink-0">
             <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-emerald-400 shrink-0" />
             <select
               value={currentView}
@@ -143,7 +143,7 @@ export default function Navbar({
             </select>
           </div>
         ) : role === 'field_officer' ? (
-          <div className="relative flex items-center bg-emerald-800 text-white px-2.5 py-1 rounded text-xs font-semibold shadow-sm whitespace-nowrap shrink-0">
+          <div className="hidden md:flex relative items-center bg-emerald-800 text-white px-2.5 py-1 rounded text-xs font-semibold shadow-sm whitespace-nowrap shrink-0">
             <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-emerald-300 shrink-0" />
             <select
               value={currentView}
@@ -156,8 +156,8 @@ export default function Navbar({
             </select>
           </div>
         ) : (
-          /* Citizen / Guest Role: Strictly limited to Citizen Portal and GIS Map */
-          <div className="relative flex items-center bg-slate-800 text-white px-2.5 py-1 rounded text-xs font-semibold shadow-sm whitespace-nowrap shrink-0">
+          /* Citizen / Guest Role on Desktop */
+          <div className="hidden md:flex relative items-center bg-slate-800 text-white px-2.5 py-1 rounded text-xs font-semibold shadow-sm whitespace-nowrap shrink-0">
             <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-emerald-400 shrink-0" />
             <select
               value={currentView === 'gis-map' ? 'gis-map' : 'citizen'}
@@ -184,7 +184,7 @@ export default function Navbar({
             <button
               onClick={logout}
               title="Sign Out"
-              className="p-1.5 rounded hover:bg-rose-50 text-rose-700 transition-colors shrink-0"
+              className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-700 transition-colors shrink-0"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -192,10 +192,10 @@ export default function Navbar({
         ) : (
           <button
             onClick={onOpenLoginModal}
-            className="px-2.5 py-1 bg-primary text-white text-xs font-semibold rounded hover:bg-primary-container transition-colors shadow-sm flex items-center gap-1.5 whitespace-nowrap shrink-0"
+            className="px-3 py-1.5 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-container transition-all shadow-sm flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 touch-manipulation"
           >
-            <LogIn className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden xs:inline">Login / Register</span>
+            <LogIn className="w-3.5 h-3.5 shrink-0 text-emerald-300" />
+            <span className="inline font-bold">Sign In</span>
           </button>
         )}
       </div>

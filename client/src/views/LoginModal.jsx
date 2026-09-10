@@ -206,37 +206,39 @@ export default function LoginModal({ isOpen, onClose, regions = [] }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-primary/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-2xl border border-outline-variant/40 max-w-md w-full overflow-hidden flex flex-col text-xs animate-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 bg-primary/60 backdrop-blur-sm z-50 overflow-y-auto flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-outline-variant/40 max-w-md w-full max-h-[92dvh] sm:max-h-[88vh] overflow-hidden flex flex-col text-xs animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200">
         {/* Header */}
-        <div className="p-4 bg-primary text-white flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-emerald-400" />
+        <div className="p-3.5 sm:p-4 bg-primary text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+              <ShieldAlert className="w-5 h-5 text-emerald-400" />
+            </div>
             <div>
               <div className="font-bold text-sm tracking-tight leading-none">
                 BhoomiRakshak Identity Gateway
               </div>
               <div className="text-[10px] text-white/75 mt-0.5 font-medium">
-                National Landslide Early Warning & Disaster Defense System
+                National Landslide Early Warning Sentinel
               </div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-white/10 rounded transition-colors text-white"
+            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white touch-manipulation active:scale-95"
             title="Close"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5 sm:w-4 sm:h-4" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-outline-variant/30 bg-surface-container-low font-semibold text-center">
+        <div className="flex border-b border-outline-variant/30 bg-surface-container-low font-semibold text-center shrink-0">
           <button
             onClick={() => { setActiveTab('login'); setErrorMsg(''); }}
-            className={`flex-1 py-2.5 transition-colors ${
+            className={`flex-1 py-3 text-[11px] sm:text-xs transition-colors touch-manipulation ${
               activeTab === 'login'
-                ? 'bg-white text-primary border-b-2 border-primary font-bold'
+                ? 'bg-white text-primary border-b-2 border-primary font-bold shadow-xs'
                 : 'text-on-surface-variant hover:text-on-surface'
             }`}
           >
@@ -244,9 +246,9 @@ export default function LoginModal({ isOpen, onClose, regions = [] }) {
           </button>
           <button
             onClick={() => { setActiveTab('citizen-register'); setErrorMsg(''); }}
-            className={`flex-1 py-2.5 transition-colors ${
+            className={`flex-1 py-3 text-[11px] sm:text-xs transition-colors touch-manipulation ${
               activeTab === 'citizen-register'
-                ? 'bg-white text-primary border-b-2 border-primary font-bold'
+                ? 'bg-white text-primary border-b-2 border-primary font-bold shadow-xs'
                 : 'text-on-surface-variant hover:text-on-surface'
             }`}
           >
@@ -254,9 +256,9 @@ export default function LoginModal({ isOpen, onClose, regions = [] }) {
           </button>
           <button
             onClick={() => { setActiveTab('setup-admin'); setErrorMsg(''); }}
-            className={`flex-1 py-2.5 transition-colors ${
+            className={`flex-1 py-3 text-[11px] sm:text-xs transition-colors touch-manipulation ${
               activeTab === 'setup-admin'
-                ? 'bg-white text-primary border-b-2 border-primary font-bold'
+                ? 'bg-white text-primary border-b-2 border-primary font-bold shadow-xs'
                 : 'text-on-surface-variant hover:text-on-surface'
             }`}
           >
@@ -264,9 +266,9 @@ export default function LoginModal({ isOpen, onClose, regions = [] }) {
           </button>
         </div>
 
-        <div className="p-5 flex flex-col gap-4 max-h-[82vh] overflow-y-auto">
+        <div className="p-4 sm:p-5 flex flex-col gap-3.5 sm:gap-4 overflow-y-auto overscroll-contain flex-1">
           {errorMsg && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded font-semibold leading-relaxed text-xs">
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg font-semibold leading-relaxed text-xs">
               <div>{errorMsg}</div>
               {errorMsg.toLowerCase().includes('already registered') && (
                 <button

@@ -342,6 +342,7 @@ export default function App() {
       <BottomNav
         currentView={currentView}
         setCurrentView={handleViewChange}
+        onOpenLoginModal={() => setShowLoginModal(true)}
       />
 
       {/* 6. Modals */}
