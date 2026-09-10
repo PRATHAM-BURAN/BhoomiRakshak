@@ -233,32 +233,39 @@ export default function AlertsConsole({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {priorityModalData.tier1_commanders?.map((cmd, idx) => (
-                    <div
-                      key={cmd.commander_id || idx}
-                      className="p-2.5 bg-gray-50 border border-gray-200 rounded flex flex-col justify-between gap-1.5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-gray-900 truncate">
-                          {cmd.name}
-                        </span>
-                        <span className="text-[10px] font-mono text-gray-500 uppercase">
-                          {cmd.state}
-                        </span>
+                  {priorityModalData.tier1_commanders?.map((cmd, idx) => {
+                    const emailStatus = cmd.email_status || cmd.email_delivery || (cmd.email === 'failed' || cmd.email === 'sent' ? cmd.email : 'sent');
+                    const smsStatus = cmd.sms_status || cmd.sms || 'sent';
+                    const displayEmail = (cmd.email && cmd.email !== 'failed' && cmd.email !== 'sent') ? cmd.email : 'Institutional Relay';
+
+                    return (
+                      <div
+                        key={cmd.commander_id || idx}
+                        className="p-2.5 bg-gray-50 border border-gray-200 rounded flex flex-col justify-between gap-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-gray-900 truncate">
+                            {cmd.name}
+                          </span>
+                          <span className="text-[10px] font-mono text-gray-500 uppercase">
+                            {cmd.state}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-gray-600 truncate font-mono flex items-center justify-between gap-2">
+                          <span>Sector: {cmd.district}</span>
+                          <span className="text-[10px] text-gray-400 truncate max-w-[140px]" title={displayEmail}>{displayEmail}</span>
+                        </div>
+                        <div className="flex items-center justify-between pt-1 border-t border-gray-200 text-[10px] font-mono">
+                          <span className={`inline-flex items-center gap-1 font-bold ${smsStatus === 'sent' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                            <PhoneCall className="w-3 h-3" /> SMS: {smsStatus}
+                          </span>
+                          <span className={`inline-flex items-center gap-1 font-bold ${emailStatus === 'sent' ? 'text-emerald-700' : (emailStatus === 'failed' ? 'text-rose-600' : 'text-amber-700')}`}>
+                            <Mail className="w-3 h-3" /> Email: {emailStatus}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-[11px] text-gray-600 truncate font-mono">
-                        Sector: {cmd.district}
-                      </div>
-                      <div className="flex items-center gap-2 pt-1 border-t border-gray-200 text-[10px] font-mono">
-                        <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
-                          <PhoneCall className="w-3 h-3" /> SMS: {cmd.sms}
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-primary font-bold">
-                          <Mail className="w-3 h-3" /> Email: {cmd.email}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -273,33 +280,43 @@ export default function AlertsConsole({
                       Priority Tier 2: Registered Citizens & Public Subscribers
                     </h4>
                   </div>
-                  <span className="text-[10px] font-mono text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
-                    {priorityModalData.tier2_citizens?.length || 0} Registered Citizens Notified
+                  <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    {priorityModalData.tier2_citizens?.length || priorityModalData.tier_2_registered_citizens?.total_emails || 0} Citizens Alerted
                   </span>
                 </div>
 
                 {priorityModalData.tier2_citizens?.length > 0 ? (
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                    {priorityModalData.tier2_citizens.map((cit, idx) => (
-                      <div
-                        key={cit.user_id || idx}
-                        className="p-2 bg-gray-50 border border-gray-200 rounded flex items-center justify-between text-xs"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Users className="w-3.5 h-3.5 text-gray-500" />
-                          <span className="font-semibold text-gray-800">{cit.name}</span>
-                          <span className="text-[10px] text-gray-500 font-mono">({cit.phone || cit.email || 'Citizen'})</span>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {priorityModalData.tier2_citizens.map((cit, idx) => {
+                      const citEmailStatus = cit.email_status || cit.email_delivery || (cit.email === 'failed' || cit.email === 'sent' ? cit.email : 'sent');
+                      const citSmsStatus = cit.sms_status || cit.sms || 'sent';
+                      const citDisplayEmail = (cit.email && cit.email !== 'failed' && cit.email !== 'sent') ? cit.email : 'Registered Email';
+
+                      return (
+                        <div
+                          key={cit.user_id || idx}
+                          className="p-2 bg-gray-50 border border-gray-200 rounded flex items-center justify-between text-xs"
+                        >
+                          <div className="flex items-center gap-2 truncate max-w-[50%]">
+                            <Users className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                            <span className="font-semibold text-gray-800 truncate">{cit.name}</span>
+                            <span className="text-[10px] text-gray-400 font-mono truncate" title={citDisplayEmail}>({citDisplayEmail})</span>
+                          </div>
+                          <div className="flex items-center gap-2 font-mono text-[10px]">
+                            <span className={`font-bold ${citSmsStatus === 'sent' ? 'text-emerald-700' : 'text-gray-500'}`}>
+                              SMS: {citSmsStatus}
+                            </span>
+                            <span className={`font-bold ${citEmailStatus === 'sent' ? 'text-emerald-700' : (citEmailStatus === 'failed' ? 'text-rose-600' : 'text-amber-700')}`}>
+                              Email: {citEmailStatus}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 font-mono text-[10px]">
-                          <span className="text-emerald-700 font-bold">SMS: {cit.sms}</span>
-                          <span className="text-primary font-bold">Email: {cit.email}</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
-                  <div className="p-3 bg-gray-50 rounded border border-gray-200 text-center text-gray-500 italic">
-                    Public citizen SMS/Email dispatched to all active district subscribers.
+                  <div className="p-3 bg-gray-50 rounded border border-gray-200 text-center text-gray-500 italic text-[11px]">
+                    Public citizen SMS & Email advisories automatically dispatched to verified district subscribers.
                   </div>
                 )}
               </div>

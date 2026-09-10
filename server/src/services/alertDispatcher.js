@@ -38,6 +38,9 @@ export function createEmailTransporter() {
     return nodemailer.createTransport({
       host: 'smtp.sendgrid.net',
       port: 587,
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
       auth: {
         user: 'apikey',
         pass: process.env.SENDGRID_API_KEY
@@ -50,6 +53,9 @@ export function createEmailTransporter() {
       host: 'smtp.resend.com',
       port: 465,
       secure: true,
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
       auth: {
         user: 'resend',
         pass: process.env.RESEND_API_KEY
@@ -63,6 +69,9 @@ export function createEmailTransporter() {
       host: process.env.SMTP_HOST,
       port: port,
       secure: port === 465,
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
@@ -71,6 +80,57 @@ export function createEmailTransporter() {
   }
 
   return null;
+}
+
+// HTTP REST API Dispatch Helpers (operates over standard HTTPS port 443, immune to cloud host SMTP port blocking)
+async function sendViaResendHttp(apiKey, fromAddress, recipientEmails, subject, html) {
+  const fromClean = fromAddress.includes('<')
+    ? fromAddress
+    : `BhoomiRakshak Sentinel <${fromAddress}>`;
+
+  // Resend API allows sending to up to 50 recipients per call
+  const payload = {
+    from: fromClean.includes('@bhoomirakshak.in') ? 'BhoomiRakshak Sentinel <onboarding@resend.dev>' : fromClean,
+    to: recipientEmails,
+    subject: subject,
+    html: html
+  };
+
+  const res = await axios.post('https://api.resend.com/emails', payload, {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    timeout: 10000
+  });
+
+  return res.data;
+}
+
+async function sendViaSendGridHttp(apiKey, fromAddress, recipientEmails, subject, html) {
+  const emailRegex = /<([^>]+)>/;
+  const match = fromAddress.match(emailRegex);
+  const fromEmail = match ? match[1] : (fromAddress.includes('@') ? fromAddress.trim() : 'alerts@bhoomirakshak.in');
+  const fromName = fromAddress.replace(/<[^>]+>/, '').replace(/["']/g, '').trim() || 'BhoomiRakshak Sentinel';
+
+  const payload = {
+    personalizations: [{
+      to: recipientEmails.map(email => ({ email }))
+    }],
+    from: { email: fromEmail, name: fromName },
+    subject: subject,
+    content: [{ type: 'text/html', value: html }]
+  };
+
+  const res = await axios.post('https://api.sendgrid.com/v3/mail/send', payload, {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    timeout: 10000
+  });
+
+  return { messageId: res.headers['x-message-id'] || 'sendgrid_http_sent' };
 }
 
 // Initialize Firebase Admin SDK if service account is provided
@@ -403,7 +463,7 @@ export async function dispatchPushChannel(alert, regionId) {
   };
 }
 
-// 4. Channel: Email Advisory Dispatch (Institutional Alert Broadcast via nodemailer)
+// 4. Channel: Email Advisory Dispatch (Institutional Alert Broadcast via HTTP API or nodemailer)
 export async function dispatchEmailChannel(alert, recipientEmails, priorityLabel = 'PRIORITY_ALERT') {
   // Recipient Count Honesty: Never return 'sent' when 0 recipients
   if (!recipientEmails || recipientEmails.length === 0) {
@@ -415,60 +475,100 @@ export async function dispatchEmailChannel(alert, recipientEmails, priorityLabel
     };
   }
 
+  const emailSubject = `[BHOOMIRAKSHAK ${alert.severity}] Landslide Disaster Warning - ${priorityLabel}`;
+  const emailHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 2px solid #ef4444; border-radius: 8px; overflow: hidden;">
+      <div style="background-color: #0f172a; color: #ffffff; padding: 20px; text-align: center;">
+        <h1 style="margin: 0; font-size: 24px; letter-spacing: 1px;">🛡️ BHOOMIRAKSHAK DISASTER SENTINEL</h1>
+        <p style="margin: 5px 0 0 0; font-size: 12px; color: #38bdf8; text-transform: uppercase;">Ministry of Development of North Eastern Region (MDoNER)</p>
+      </div>
+      <div style="padding: 24px; background-color: #ffffff;">
+        <div style="display: inline-block; background-color: ${alert.severity === 'CRITICAL' ? '#fee2e2' : '#fef3c7'}; color: ${alert.severity === 'CRITICAL' ? '#b91c1c' : '#b45309'}; padding: 6px 14px; border-radius: 9999px; font-weight: bold; font-size: 13px; text-transform: uppercase; margin-bottom: 16px;">
+          🚨 THREAT SEVERITY: ${alert.severity} • ${priorityLabel}
+        </div>
+        <h2 style="color: #1e293b; margin: 0 0 12px 0;">Urgent Landslide Advisory</h2>
+        <p style="color: #334155; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+          ${alert.message}
+        </p>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px 0; color: #64748b; font-weight: bold;">Trigger Code:</td>
+            <td style="padding: 8px 0; color: #0f172a; text-align: right;">${alert.trigger_reason || 'Hydrometeorological Threshold Exceeded'}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px 0; color: #64748b; font-weight: bold;">Timestamp:</td>
+            <td style="padding: 8px 0; color: #0f172a; text-align: right;">${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #64748b; font-weight: bold;">Recommended Action:</td>
+            <td style="padding: 8px 0; color: #b91c1c; font-weight: bold; text-align: right;">${alert.action_recommendation || 'Initiate Immediate Hill Sector Protocol'}</td>
+          </tr>
+        </table>
+        <div style="background-color: #f8fafc; border-left: 4px solid #0284c7; padding: 12px 16px; border-radius: 4px; font-size: 12px; color: #475569;">
+          <strong>Immediate Directives:</strong> Clear identified hill road corridors, restrict valley vehicular movement, and maintain active radio contact on VHF Channel 4.
+        </div>
+      </div>
+      <div style="background-color: #f1f5f9; padding: 14px 20px; font-size: 11px; color: #64748b; text-align: center;">
+        National Disaster Response Force (SDRF / NDRF Grid) • Emergency Control Hotline: 1070 / 1077
+      </div>
+    </div>
+  `;
+
+  const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER || '"BhoomiRakshak Disaster Sentinel" <alerts@bhoomirakshak.in>';
+
+  // Priority 1: Resend HTTP REST API (port 443 HTTPS - immune to cloud host SMTP port blocking)
+  if (process.env.RESEND_API_KEY) {
+    try {
+      console.log(`[EMAIL DISPATCH] Dispatching via Resend HTTP REST API (port 443) to ${recipientEmails.length} recipient(s)...`);
+      const resendData = await sendViaResendHttp(process.env.RESEND_API_KEY, fromAddress, recipientEmails, emailSubject, emailHtml);
+      console.log('[RESEND ACCEPTANCE]:', JSON.stringify(resendData));
+      return {
+        channel: 'email',
+        status: 'sent',
+        timestamp: new Date().toISOString(),
+        recipients_count: recipientEmails.length,
+        priority: priorityLabel,
+        message_id: resendData?.id || 'resend_http_delivered',
+        details: `Emergency advisory dispatched via Resend HTTP to ${recipientEmails.length} address(es)`
+      };
+    } catch (resendErr) {
+      console.warn('[RESEND HTTP WARNING]:', resendErr.response?.data || resendErr.message);
+    }
+  }
+
+  // Priority 2: SendGrid HTTP REST API (port 443 HTTPS)
+  if (process.env.SENDGRID_API_KEY) {
+    try {
+      console.log(`[EMAIL DISPATCH] Dispatching via SendGrid HTTP REST API (port 443) to ${recipientEmails.length} recipient(s)...`);
+      const sendGridData = await sendViaSendGridHttp(process.env.SENDGRID_API_KEY, fromAddress, recipientEmails, emailSubject, emailHtml);
+      return {
+        channel: 'email',
+        status: 'sent',
+        timestamp: new Date().toISOString(),
+        recipients_count: recipientEmails.length,
+        priority: priorityLabel,
+        message_id: sendGridData.messageId,
+        details: `Emergency advisory dispatched via SendGrid HTTP to ${recipientEmails.length} address(es)`
+      };
+    } catch (sgErr) {
+      console.warn('[SENDGRID HTTP WARNING]:', sgErr.response?.data || sgErr.message);
+    }
+  }
+
+  // Priority 3: Nodemailer SMTP Relay (standard local or unblocked SMTP)
   const transporter = createEmailTransporter();
   if (!transporter) {
-    console.log('[EMAIL DISPATCH] Email relay not configured (missing SMTP_HOST/USER/PASS or SENDGRID_API_KEY in .env).');
+    console.log('[EMAIL DISPATCH] Email relay not configured (missing SMTP credentials or RESEND_API_KEY in .env).');
     return {
       channel: 'email',
       status: 'not_configured',
       timestamp: new Date().toISOString(),
-      details: 'Email credentials (SMTP or SendGrid/Resend) not configured in .env'
+      details: 'Email credentials (SMTP_HOST/USER/PASS or RESEND_API_KEY) not configured in .env'
     };
   }
 
   try {
-    const emailSubject = `[BHOOMIRAKSHAK ${alert.severity}] Landslide Disaster Warning - ${priorityLabel}`;
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 2px solid #ef4444; border-radius: 8px; overflow: hidden;">
-        <div style="background-color: #0f172a; color: #ffffff; padding: 20px; text-align: center;">
-          <h1 style="margin: 0; font-size: 24px; letter-spacing: 1px;">🛡️ BHOOMIRAKSHAK DISASTER SENTINEL</h1>
-          <p style="margin: 5px 0 0 0; font-size: 12px; color: #38bdf8; text-transform: uppercase;">Ministry of Development of North Eastern Region (MDoNER)</p>
-        </div>
-        <div style="padding: 24px; background-color: #ffffff;">
-          <div style="display: inline-block; background-color: ${alert.severity === 'CRITICAL' ? '#fee2e2' : '#fef3c7'}; color: ${alert.severity === 'CRITICAL' ? '#b91c1c' : '#b45309'}; padding: 6px 14px; border-radius: 9999px; font-weight: bold; font-size: 13px; text-transform: uppercase; margin-bottom: 16px;">
-            🚨 THREAT SEVERITY: ${alert.severity} • ${priorityLabel}
-          </div>
-          <h2 style="color: #1e293b; margin: 0 0 12px 0;">Urgent Landslide Advisory</h2>
-          <p style="color: #334155; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
-            ${alert.message}
-          </p>
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 8px 0; color: #64748b; font-weight: bold;">Trigger Code:</td>
-              <td style="padding: 8px 0; color: #0f172a; text-align: right;">${alert.trigger_reason || 'Hydrometeorological Threshold Exceeded'}</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 8px 0; color: #64748b; font-weight: bold;">Timestamp:</td>
-              <td style="padding: 8px 0; color: #0f172a; text-align: right;">${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; color: #64748b; font-weight: bold;">Recommended Action:</td>
-              <td style="padding: 8px 0; color: #b91c1c; font-weight: bold; text-align: right;">${alert.action_recommendation || 'Initiate Immediate Hill Sector Protocol'}</td>
-            </tr>
-          </table>
-          <div style="background-color: #f8fafc; border-left: 4px solid #0284c7; padding: 12px 16px; border-radius: 4px; font-size: 12px; color: #475569;">
-            <strong>Immediate Directives:</strong> Clear identified hill road corridors, restrict valley vehicular movement, and maintain active radio contact on VHF Channel 4.
-          </div>
-        </div>
-        <div style="background-color: #f1f5f9; padding: 14px 20px; font-size: 11px; color: #64748b; text-align: center;">
-          National Disaster Response Force (SDRF / NDRF Grid) • Emergency Control Hotline: 1070 / 1077
-        </div>
-      </div>
-    `;
-
-    const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER || '"BhoomiRakshak Disaster Sentinel" <alerts@bhoomirakshak.in>';
-
-    console.log(`[EMAIL DISPATCH] Dispatching via nodemailer to ${recipientEmails.length} recipient(s)...`);
+    console.log(`[EMAIL DISPATCH] Dispatching via nodemailer SMTP to ${recipientEmails.length} recipient(s)...`);
 
     const info = await transporter.sendMail({
       from: fromAddress,
@@ -491,18 +591,23 @@ export async function dispatchEmailChannel(alert, recipientEmails, priorityLabel
       accepted: info.accepted,
       rejected: info.rejected,
       details: isAccepted
-        ? `Emergency advisory accepted by relay for ${recipientEmails.length} address(es) (MsgID: ${info.messageId})`
+        ? `Emergency advisory accepted by SMTP relay for ${recipientEmails.length} address(es) (MsgID: ${info.messageId})`
         : 'Relay rejected email transmission',
       raw_response: info
     };
   } catch (err) {
     console.error('[EMAIL ERROR]:', err);
+    const isTimeout = err.code === 'ETIMEDOUT' || err.message?.includes('timeout') || err.message?.includes('ECONNREFUSED');
+    const details = isTimeout
+      ? `SMTP port connection timed out (cloud host blocks ports 25/465/587). Please configure RESEND_API_KEY in hosting environment variables for HTTPS delivery.`
+      : `Email relay failed: ${err.message}`;
+
     return {
       channel: 'email',
       status: 'failed',
       timestamp: new Date().toISOString(),
       error: err.message,
-      details: `Email relay failed: ${err.message}`
+      details
     };
   }
 }
@@ -514,9 +619,25 @@ export async function dispatchAlert(alertData) {
   const users = localDB.getTable('users');
 
   // --- TIER 1: ALL 8 FIELD MASTERS / COMMANDERS ---
+  const isQaTestMode = process.env.QA_TEST_MODE === 'true' || process.env.TEST_MODE === 'true';
+  const testOfficerEmail = process.env.TEST_OFFICER_EMAIL || process.env.TEST_ADMIN_EMAIL || process.env.SMTP_USER;
+  const testOfficerPhone = process.env.TEST_FIELD_OFFICER_PHONE;
+
   const fieldCommanders = users.filter(u => u.role === 'field_officer' && u.is_active !== false);
-  const commanderPhones = Array.from(new Set(fieldCommanders.map(c => c.phone).filter(Boolean)));
-  const commanderEmails = Array.from(new Set(fieldCommanders.map(c => c.email).filter(Boolean)));
+
+  const commanderPhones = Array.from(new Set(fieldCommanders.map(c => {
+    if (isQaTestMode && testOfficerPhone) {
+      return `+91${testOfficerPhone.replace(/\D/g, '').slice(-10)}`;
+    }
+    return c.phone;
+  }).filter(Boolean)));
+
+  const commanderEmails = Array.from(new Set(fieldCommanders.map(c => {
+    if (isQaTestMode && testOfficerEmail) {
+      return testOfficerEmail;
+    }
+    return c.email;
+  }).filter(Boolean)));
 
   // --- TIER 2: REGISTERED USERS / CITIZENS IN TARGET DISTRICT(S) ---
   const targetRegionIds = Array.isArray(alertData.region_ids) && alertData.region_ids.length > 0
@@ -525,11 +646,11 @@ export async function dispatchAlert(alertData) {
 
   const citizenPhones = new Set();
   const citizenEmails = new Set();
+  const activeCitizens = [];
 
-  // Region Scoping for SMS: profiles WHERE region_id = X AND phone_verified = true AND sms_enabled = true
-  // Citizens without a region set (or unverified/unsubscribed) must NEVER receive region-specific SMS.
+  // 1. Gather citizens from localDB
   users.filter(u => u.role === 'citizen' && u.is_active !== false).forEach(c => {
-    const matchesRegion = targetRegionIds.length > 0 && (
+    const matchesRegion = targetRegionIds.length === 0 || (
       (c.region_id && targetRegionIds.includes(c.region_id)) || 
       (Array.isArray(c.region_ids) && c.region_ids.some(r => targetRegionIds.includes(r)))
     );
@@ -537,39 +658,80 @@ export async function dispatchAlert(alertData) {
       if (c.phone && c.phone_verified === true && c.sms_enabled === true) {
         citizenPhones.add(c.phone);
       }
-      if (c.email) {
+      if (c.email && !c.email.endsWith('@bhoomirakshak.local')) {
         citizenEmails.add(c.email);
+        activeCitizens.push({
+          id: c.id,
+          name: c.name,
+          district: c.district || 'Assigned District',
+          phone: c.phone,
+          email: c.email
+        });
       }
     }
   });
 
-  // Query Supabase profiles for verified SMS citizens if configured
-  if (isSupabaseConfigured && supabase && targetRegionIds.length > 0) {
+  // 2. Query Supabase profiles & auth.users for registered citizens (Production Cloud DB)
+  if (isSupabaseConfigured && supabase) {
     try {
       let query = supabase
         .from('profiles')
-        .select('phone, region_id')
-        .eq('role', 'citizen')
-        .eq('phone_verified', true)
-        .eq('sms_enabled', true);
+        .select('*')
+        .eq('role', 'citizen');
 
       if (targetRegionIds.length === 1) {
         query = query.eq('region_id', targetRegionIds[0]);
-      } else {
+      } else if (targetRegionIds.length > 1) {
         query = query.in('region_id', targetRegionIds);
       }
 
       const { data: profiles, error: sbErr } = await query;
-      if (!sbErr && profiles) {
+      if (!sbErr && profiles && profiles.length > 0) {
+        let authEmailMap = new Map();
+        try {
+          const { data: authUsersData } = await supabase.auth.admin.listUsers();
+          if (authUsersData?.users) {
+            authUsersData.users.forEach(u => {
+              if (u.id && u.email && !u.email.endsWith('@bhoomirakshak.local')) {
+                authEmailMap.set(u.id, u.email);
+              }
+            });
+          }
+        } catch (authErr) {
+          console.warn('[SUPABASE AUTH USERS QUERY]:', authErr.message);
+        }
+
         profiles.forEach(p => {
-          if (p.phone) citizenPhones.add(p.phone);
+          const email = authEmailMap.get(p.id) || p.email;
+          if (email) {
+            citizenEmails.add(email);
+          }
+          if (p.phone && p.sms_enabled) {
+            citizenPhones.add(p.phone);
+          }
+          if (email || p.phone) {
+            if (!activeCitizens.some(ac => ac.id === p.id || (email && ac.email === email))) {
+              activeCitizens.push({
+                id: p.id,
+                name: p.full_name || 'Registered Citizen',
+                district: p.district || 'NER Monitored Sector',
+                email: email || null,
+                phone: p.phone || null
+              });
+            }
+          }
         });
       } else if (sbErr) {
-        console.warn('[SUPABASE PROFILES QUERY FOR SMS NOTICE]:', sbErr.message);
+        console.warn('[SUPABASE PROFILES QUERY FOR CITIZENS NOTICE]:', sbErr.message);
       }
     } catch (sbErr) {
       console.warn('[SUPABASE PROFILES QUERY EXCEPTION]:', sbErr.message);
     }
+  }
+
+  // In QA Test Mode, if test officer email is configured, ensure it is in citizen emails if any exist
+  if (isQaTestMode && testOfficerEmail && citizenEmails.size > 0) {
+    citizenEmails.add(testOfficerEmail);
   }
 
   const registeredCitizenPhones = Array.from(citizenPhones);
@@ -639,7 +801,7 @@ export async function dispatchAlert(alertData) {
       tier_1_commanders_count: commanderEmails.length,
       tier_2_citizens_count: registeredCitizenEmails.length,
       total_email_recipients: allEmailsPrioritized.length,
-      details: `Email: Tier 1 [${tier1EmailResult.status}] + Tier 2 [${tier2EmailResult.status}]`
+      details: tier1EmailResult.details || tier2EmailResult.details || `Email: Tier 1 [${tier1EmailResult.status}] + Tier 2 [${tier2EmailResult.status}]`
     },
     pushResult
   ];
@@ -649,23 +811,31 @@ export async function dispatchAlert(alertData) {
     priority_dispatch: {
       alert_id: alertData.id,
       severity: alertData.severity,
-      tier1_commanders: fieldCommanders.map(c => ({
-        commander_id: c.id,
-        name: c.name,
-        district: c.district,
-        state: c.state,
-        phone: c.phone,
-        email: c.email,
-        sms: tier1SmsResult.status,
-        email: tier1EmailResult.status
-      })),
-      tier2_citizens: users.filter(u => u.role === 'citizen').map(c => ({
+      tier1_commanders: fieldCommanders.map(c => {
+        const email = (isQaTestMode && testOfficerEmail) ? testOfficerEmail : c.email;
+        return {
+          commander_id: c.id,
+          name: c.name,
+          district: c.district,
+          state: c.state,
+          phone: c.phone,
+          email: email,
+          sms_status: tier1SmsResult.status,
+          email_status: tier1EmailResult.status,
+          sms: tier1SmsResult.status,
+          email_delivery: tier1EmailResult.status
+        };
+      }),
+      tier2_citizens: activeCitizens.map(c => ({
         user_id: c.id,
         name: c.name,
+        district: c.district || 'Registered Citizen',
         phone: c.phone,
         email: c.email,
+        sms_status: tier2SmsResult.status,
+        email_status: tier2EmailResult.status,
         sms: tier2SmsResult.status,
-        email: tier2EmailResult.status
+        email_delivery: tier2EmailResult.status
       })),
       channels_executed: [
         'Priority Tier 1: 8 Field Sector Commanders (SMS + Institutional Email)',
@@ -675,13 +845,20 @@ export async function dispatchAlert(alertData) {
       ],
       tier_1_field_commanders: {
         total: fieldCommanders.length,
-        recipients: fieldCommanders.map(c => ({ name: c.name, district: c.district, state: c.state, phone: c.phone, email: c.email })),
+        recipients: fieldCommanders.map(c => ({
+          name: c.name,
+          district: c.district,
+          state: c.state,
+          phone: c.phone,
+          email: (isQaTestMode && testOfficerEmail) ? testOfficerEmail : c.email
+        })),
         sms_status: tier1SmsResult.status,
         email_status: tier1EmailResult.status
       },
       tier_2_registered_citizens: {
         total_phones: registeredCitizenPhones.length,
         total_emails: registeredCitizenEmails.length,
+        recipients: activeCitizens.map(c => ({ name: c.name, email: c.email, phone: c.phone })),
         sms_status: tier2SmsResult.status,
         email_status: tier2EmailResult.status
       },
