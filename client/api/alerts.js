@@ -14,7 +14,7 @@ const DEFAULT_COMMANDERS = [
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -338,6 +338,36 @@ export default async function handler(req, res) {
         message: 'Emergency alert broadcasted with Priority Tier 1 (Commanders) and Tier 2 (Citizens).',
         alert,
         priority_dispatch
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // DELETE: Remove individual alert or purge all alerts
+  if (req.method === 'DELETE') {
+    try {
+      let body = req.body;
+      if (typeof body === 'string') {
+        try { body = JSON.parse(body); } catch { body = {}; }
+      }
+      const alertId = req.query.id || body?.id;
+
+      if (supabase) {
+        try {
+          if (alertId) {
+            await supabase.from('alerts').delete().eq('id', alertId);
+          } else {
+            await supabase.from('alerts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          }
+        } catch (sbErr) {
+          console.warn('[SUPABASE ALERTS DELETE]:', sbErr.message);
+        }
+      }
+
+      return res.status(200).json({
+        message: alertId ? `Alert ${alertId} deleted from registry.` : 'Active warning registry purged successfully.',
+        id: alertId
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

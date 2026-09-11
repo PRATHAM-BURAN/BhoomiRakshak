@@ -30,30 +30,45 @@ export async function apiRequest(endpoint, options = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
-    ...options,
-    headers
-  });
+  // AbortController timeout (default 15s) to guarantee network calls never hang indefinitely
+  const controller = new AbortController();
+  const timeoutMs = options.timeout || 15000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  const contentType = response.headers.get('content-type');
-  const isJson = contentType && contentType.includes('application/json');
-  const data = isJson ? await response.json() : await response.text();
+  try {
+    const response = await fetch(`${BASE_URL}${endpoint}`, {
+      ...options,
+      signal: options.signal || controller.signal,
+      headers
+    });
+    clearTimeout(timeoutId);
 
-  if (!response.ok) {
-    let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
-    if (data && typeof data === 'object' && data.error) {
-      errorMsg = data.error;
-    } else if (typeof data === 'string' && !data.includes('<!DOCTYPE') && !data.includes('<html') && data.trim().length > 0) {
-      errorMsg = data;
+    const contentType = response.headers.get('content-type');
+    const isJson = contentType && contentType.includes('application/json');
+    const data = isJson ? await response.json() : await response.text();
+
+    if (!response.ok) {
+      let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+      if (data && typeof data === 'object' && data.error) {
+        errorMsg = data.error;
+      } else if (typeof data === 'string' && !data.includes('<!DOCTYPE') && !data.includes('<html') && data.trim().length > 0) {
+        errorMsg = data;
+      }
+      throw new Error(errorMsg);
     }
-    throw new Error(errorMsg);
-  }
 
-  if (typeof data === 'string' && (data.includes('<!DOCTYPE') || data.includes('<html'))) {
-    throw new Error('Server returned HTML instead of API data. Please ensure the backend is running and reachable.');
-  }
+    if (typeof data === 'string' && (data.includes('<!DOCTYPE') || data.includes('<html'))) {
+      throw new Error('Server returned HTML instead of API data. Please ensure the backend is running and reachable.');
+    }
 
-  return data;
+    return data;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s. Please check network connection.`);
+    }
+    throw err;
+  }
 }
 
 export const api = {
@@ -97,10 +112,18 @@ export const api = {
 
   // Field Reports
   getReports: () => apiRequest('/reports'),
-  createReport: (formData) => apiRequest('/reports', {
-    method: 'POST',
-    body: formData
-  }),
+  createReport: (data) => {
+    if (data instanceof FormData) {
+      return apiRequest('/reports', {
+        method: 'POST',
+        body: data
+      });
+    }
+    return apiRequest('/reports', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
   updateReportStatus: (id, status, review_notes) => apiRequest(`/reports/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status, review_notes })
@@ -129,6 +152,13 @@ export const api = {
   broadcastAlert: (payload) => apiRequest('/alerts', {
     method: 'POST',
     body: JSON.stringify(payload)
+  }),
+  deleteAlert: (alertId) => apiRequest(`/alerts?id=${encodeURIComponent(alertId)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ id: alertId })
+  }),
+  clearAllAlerts: () => apiRequest('/alerts', {
+    method: 'DELETE'
   }),
   subscribeAlerts: (payload) => apiRequest('/alerts/subscribe', {
     method: 'POST',

@@ -18,7 +18,8 @@ import {
   ShieldCheck,
   Building2,
   Smartphone,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import SeverityChip from '../components/SeverityChip';
 import EmptyState from '../components/EmptyState';
@@ -28,9 +29,14 @@ import { api } from '../api';
 export default function AlertsConsole({
   alerts = [],
   regions = [],
-  onAlertBroadcasted
+  onAlertBroadcasted,
+  onAlertDeleted,
+  onAlertsCleared
 }) {
   const { role } = useAuth();
+  const [deletingId, setDeletingId] = useState(null);
+  const [isClearingAll, setIsClearingAll] = useState(false);
+  const [deleteFeedback, setDeleteFeedback] = useState('');
 
   // Multi-district broadcast target
   const [targetAll, setTargetAll] = useState(true);
@@ -149,6 +155,45 @@ export default function AlertsConsole({
         <span>{status}</span>
       </span>
     );
+  };
+
+  const handleDeleteAlert = async (alertId) => {
+    if (!window.confirm(`Permanently remove alert [${alertId.slice(0, 8)}] from the Active Warning Registry & Audit Log?`)) {
+      return;
+    }
+    setDeletingId(alertId);
+    try {
+      await api.deleteAlert(alertId);
+      setDeleteFeedback(`Alert ${alertId.slice(0, 8)} removed from warning registry.`);
+      if (onAlertDeleted) {
+        onAlertDeleted(alertId);
+      }
+      setTimeout(() => setDeleteFeedback(''), 4000);
+    } catch (err) {
+      alert(`Failed to delete alert: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleClearAllAlerts = async () => {
+    if (alerts.length === 0) return;
+    if (!window.confirm(`Are you sure you want to permanently purge all ${alerts.length} alert records from the Active Warning Registry & Multi-Channel Delivery Audit Log?`)) {
+      return;
+    }
+    setIsClearingAll(true);
+    try {
+      await api.clearAllAlerts();
+      setDeleteFeedback('Active Warning Registry & Multi-Channel Delivery Audit Log successfully purged.');
+      if (onAlertsCleared) {
+        onAlertsCleared();
+      }
+      setTimeout(() => setDeleteFeedback(''), 4000);
+    } catch (err) {
+      alert(`Failed to purge registry: ${err.message}`);
+    } finally {
+      setIsClearingAll(false);
+    }
   };
 
   return (
@@ -596,13 +641,38 @@ export default function AlertsConsole({
 
       {/* Emergency Warning Registry & Delivery Audit Table */}
       <div className="bg-white rounded border border-outline-variant/40 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-outline-variant/30 flex items-center justify-between">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface">
-            Active Warning Registry & Multi-Channel Delivery Audit Log ({alerts.length})
-          </h3>
-          <span className="font-mono text-[11px] text-on-surface-variant">
-            Live Stream Connected
-          </span>
+        <div className="p-4 border-b border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface flex items-center gap-2">
+              <span>Active Warning Registry & Multi-Channel Delivery Audit Log</span>
+              <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-mono font-bold">
+                {alerts.length}
+              </span>
+            </h3>
+            <span className="font-mono text-[11px] text-on-surface-variant">
+              Live Stream Connected • Supabase Central Hub
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {deleteFeedback && (
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 animate-in fade-in">
+                {deleteFeedback}
+              </span>
+            )}
+            {alerts.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAllAlerts}
+                disabled={isClearingAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition-colors disabled:opacity-50"
+                title="Purge all alert records and audit logs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isClearingAll ? 'Purging Registry...' : 'Purge All Alerts'}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {alerts.length === 0 ? (
@@ -621,6 +691,7 @@ export default function AlertsConsole({
                   <th className="p-3">Severity</th>
                   <th className="p-3">Warning Advisory</th>
                   <th className="p-3">Priority Multi-Channel Dispatch Audit</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/20">
@@ -628,14 +699,14 @@ export default function AlertsConsole({
                   <tr key={a.id} className="hover:bg-surface-container-lowest/70 transition-colors">
                     <td className="p-3 whitespace-nowrap">
                       <div className="font-mono font-bold text-primary">
-                        {a.id.slice(0, 8).toUpperCase()}
+                        {a.id ? a.id.slice(0, 8).toUpperCase() : 'N/A'}
                       </div>
                       <div className="font-mono text-[10px] text-on-surface-variant">
-                        {new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} IST
+                        {a.created_at ? new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' IST' : ''}
                       </div>
                     </td>
                     <td className="p-3 font-semibold text-on-surface whitespace-nowrap">
-                      {a.region_name || 'All Monitored Sectors'}
+                      {a.region_name || (a.region?.name) || 'All Monitored Sectors'}
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       <SeverityChip severity={a.severity} />
@@ -662,6 +733,18 @@ export default function AlertsConsole({
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td className="p-3 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAlert(a.id)}
+                        disabled={deletingId === a.id}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded hover:bg-rose-100 transition-colors disabled:opacity-50"
+                        title={`Delete alert ${a.id?.slice(0, 8)}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>{deletingId === a.id ? 'Deleting...' : 'Delete'}</span>
+                      </button>
                     </td>
                   </tr>
                 ))}

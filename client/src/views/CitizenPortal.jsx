@@ -196,23 +196,20 @@ export default function CitizenPortal({ regions = [], alerts = [], onReportSubmi
 
     // If online, transmit via REST API
     try {
-      const formData = new FormData();
-      formData.append('region_id', primaryDistrict);
-      formData.append('region_ids', JSON.stringify(selectedReportDistricts));
-      formData.append('report_type', reportType);
-      formData.append('severity', severity);
-      formData.append('description', description);
-      formData.append('latitude', lat);
-      formData.append('longitude', lon);
-      formData.append('idempotency_key', reportPayload.idempotency_key);
-      if (mediaDataUrl) {
-        formData.append('media_data_url', mediaDataUrl);
-      }
-      if (mediaFile) {
-        formData.append('media', mediaFile);
-      }
+      const payload = {
+        region_id: primaryDistrict,
+        region_ids: selectedReportDistricts,
+        report_type: reportType,
+        severity,
+        description,
+        latitude: lat,
+        longitude: lon,
+        idempotency_key: reportPayload.idempotency_key,
+        reporter_name: user?.name || 'Community Citizen',
+        media_data_url: mediaDataUrl
+      };
 
-      const res = await api.createReport(formData);
+      const res = await api.createReport(payload);
       setReportStatusMsg(`Observation recorded successfully across ${selectedReportDistricts.length} sector(s)! Dispatched to Field Commanders & Regional Admin.`);
       setDescription('');
       setMediaFile(null);
@@ -220,9 +217,14 @@ export default function CitizenPortal({ regions = [], alerts = [], onReportSubmi
         onReportSubmitted(res.report);
       }
     } catch (err) {
-      await queueOfflineReport({ ...reportPayload, mediaFile, media_data_url: mediaDataUrl });
-      setReportStatusMsg('Network transmission failed. Stored in local offline queue.');
-      refreshPendingCount();
+      console.warn('[CITIZEN REPORT ERROR]:', err.message);
+      try {
+        await queueOfflineReport({ ...reportPayload, media_data_url: mediaDataUrl });
+        setReportStatusMsg('Network transmission failed. Stored in local offline queue.');
+        refreshPendingCount();
+      } catch (qErr) {
+        setReportStatusMsg(`Submission error: ${err.message}`);
+      }
     } finally {
       setIsSubmitting(false);
     }

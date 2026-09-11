@@ -255,6 +255,16 @@ export default function App() {
                 setAlerts(prev => [newAlert, ...prev]);
                 fetchData();
               }}
+              onAlertBroadcasted={(newAlert) => {
+                setAlerts(prev => [newAlert, ...prev]);
+                fetchData();
+              }}
+              onAlertDeleted={(deletedId) => {
+                setAlerts(prev => prev.filter(a => a.id !== deletedId));
+              }}
+              onAlertsCleared={() => {
+                setAlerts([]);
+              }}
             />
           )}
 

@@ -123,22 +123,20 @@ export default function FieldOfficerApp({ regions = [], alerts = [], onReportSub
 
     // Online submission via REST API
     try {
-      const formData = new FormData();
-      formData.append('region_id', assignedRegion.id);
-      formData.append('report_type', reportType);
-      formData.append('severity', severity);
-      formData.append('description', description);
-      formData.append('latitude', lat);
-      formData.append('longitude', lon);
-      formData.append('idempotency_key', reportData.idempotency_key);
-      if (mediaDataUrl) {
-        formData.append('media_data_url', mediaDataUrl);
-      }
-      if (mediaFile) {
-        formData.append('media', mediaFile);
-      }
+      const payload = {
+        region_id: assignedRegion.id,
+        region_name: `${assignedRegion.district}, ${assignedRegion.state}`,
+        report_type: reportType,
+        severity,
+        description,
+        latitude: lat,
+        longitude: lon,
+        idempotency_key: reportData.idempotency_key,
+        reporter_name: user?.name || 'Tactical Field Officer',
+        media_data_url: mediaDataUrl
+      };
 
-      const res = await api.createReport(formData);
+      const res = await api.createReport(payload);
       setStatusFeedback('Report verified and synchronized to the Central Disaster Command Desk.');
       setDescription('');
       setMediaFile(null);
@@ -146,10 +144,15 @@ export default function FieldOfficerApp({ regions = [], alerts = [], onReportSub
         onReportSubmitted(res.report);
       }
     } catch (err) {
+      console.warn('[OFFICER REPORT ERROR]:', err.message);
       // Fallback to offline queue on network hiccup
-      await queueOfflineReport({ ...reportData, mediaFile, media_data_url: mediaDataUrl });
-      setStatusFeedback('Transmission interrupted. Queued in IndexedDB for auto-sync.');
-      refreshPendingCount();
+      try {
+        await queueOfflineReport({ ...reportData, media_data_url: mediaDataUrl });
+        setStatusFeedback('Transmission interrupted. Queued in IndexedDB for auto-sync.');
+        refreshPendingCount();
+      } catch (qErr) {
+        setStatusFeedback(`Submission error: ${err.message}`);
+      }
     } finally {
       setSubmitting(false);
     }

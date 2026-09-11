@@ -13,67 +13,103 @@
 export async function compressImageToDataUrl(file, maxWidth = 1024, maxHeight = 1024, quality = 0.82) {
   if (!file) return null;
 
-  return new Promise((resolve, reject) => {
-    // If not an image, just read as data URL
-    if (!file.type.startsWith('image/')) {
+  return new Promise((resolve) => {
+    // Failsafe timeout: under NO circumstance wait more than 2.5 seconds
+    const timer = setTimeout(() => {
+      console.warn('[IMAGE COMPRESS] Timeout fallback triggered');
+      try {
+        const fallbackReader = new FileReader();
+        fallbackReader.onload = () => resolve(fallbackReader.result);
+        fallbackReader.onerror = () => resolve(null);
+        fallbackReader.readAsDataURL(file);
+      } catch {
+        resolve(null);
+      }
+    }, 2500);
+
+    try {
+      // If not an image, just read as data URL
+      if (!file.type || !file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          clearTimeout(timer);
+          resolve(reader.result);
+        };
+        reader.onerror = () => {
+          clearTimeout(timer);
+          resolve(null);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-      return;
-    }
+      reader.onload = (e) => {
+        try {
+          const img = new Image();
+          img.onload = () => {
+            clearTimeout(timer);
+            try {
+              let width = img.width || 800;
+              let height = img.height || 600;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
+              // Calculate scaled dimensions keeping aspect ratio
+              if (width > height) {
+                if (width > maxWidth) {
+                  height = Math.round((height * maxWidth) / width);
+                  width = maxWidth;
+                }
+              } else {
+                if (height > maxHeight) {
+                  width = Math.round((width * maxHeight) / height);
+                  height = maxHeight;
+                }
+              }
 
-        // Calculate scaled dimensions keeping aspect ratio
-        if (width > height) {
-          if (width > maxWidth) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
-          }
-        }
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
 
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) {
+                resolve(e.target.result);
+                return;
+              }
 
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          // Fallback to raw data url if canvas 2D context fails
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, width, height);
+              ctx.drawImage(img, 0, 0, width, height);
+
+              const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+              const dataUrl = canvas.toDataURL(mimeType, quality);
+              resolve(dataUrl);
+            } catch {
+              resolve(e.target.result);
+            }
+          };
+
+          img.onerror = () => {
+            clearTimeout(timer);
+            resolve(e.target.result);
+          };
+
+          img.src = e.target.result;
+        } catch {
+          clearTimeout(timer);
           resolve(e.target.result);
-          return;
         }
-
-        // Fill background white in case of transparent PNG converted to JPEG
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-
-        const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-        const dataUrl = canvas.toDataURL(mimeType, quality);
-        resolve(dataUrl);
       };
 
-      img.onerror = () => {
-        // Fallback to raw file data URL
-        resolve(e.target.result);
+      reader.onerror = () => {
+        clearTimeout(timer);
+        resolve(null);
       };
 
-      img.src = e.target.result;
-    };
-
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    } catch {
+      clearTimeout(timer);
+      resolve(null);
+    }
   });
 }
 

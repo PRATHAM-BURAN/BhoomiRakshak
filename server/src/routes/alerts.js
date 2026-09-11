@@ -438,4 +438,46 @@ router.get('/unacknowledged', requireAuth, async (req, res) => {
   }
 });
 
+// 7. DELETE /api/alerts/:id or DELETE /api/alerts?id=... (Remove individual alert record)
+router.delete('/:id?', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const alertId = req.params.id || req.query.id || req.body?.id;
+    let alerts = localDB.getTable('alerts');
+
+    if (alertId) {
+      const idx = alerts.findIndex(a => a.id === alertId);
+      if (idx >= 0) {
+        alerts.splice(idx, 1);
+        localDB.save();
+      }
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.from('alerts').delete().eq('id', alertId);
+        } catch (sbErr) {
+          console.warn('[SUPABASE ALERT DELETE WARN]:', sbErr.message);
+        }
+      }
+
+      return res.json({ message: `Alert ${alertId} deleted from registry.`, id: alertId });
+    } else {
+      // Purge all alert records
+      alerts.length = 0;
+      localDB.save();
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.from('alerts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        } catch (sbErr) {
+          console.warn('[SUPABASE ALERTS CLEAR WARN]:', sbErr.message);
+        }
+      }
+
+      return res.json({ message: 'Active warning registry purged successfully.' });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
