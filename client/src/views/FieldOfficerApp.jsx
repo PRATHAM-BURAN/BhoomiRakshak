@@ -16,6 +16,7 @@ import SeverityChip from '../components/SeverityChip';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { queueOfflineReport } from '../utils/offlineQueue';
+import { compressImageToDataUrl } from '../utils/imageUtils';
 import { api } from '../api';
 import SmsVerificationCard from '../components/SmsVerificationCard';
 
@@ -82,6 +83,16 @@ export default function FieldOfficerApp({ regions = [], alerts = [], onReportSub
 
     setSubmitting(true);
 
+    // Compress image client-side to self-contained Base64 Data URL
+    let mediaDataUrl = null;
+    if (mediaFile) {
+      try {
+        mediaDataUrl = await compressImageToDataUrl(mediaFile);
+      } catch (cErr) {
+        console.warn('[IMAGE COMPRESSION FAILED, PROCEEDING]:', cErr.message);
+      }
+    }
+
     const reportData = {
       region_id: assignedRegion.id,
       report_type: reportType,
@@ -90,13 +101,14 @@ export default function FieldOfficerApp({ regions = [], alerts = [], onReportSub
       latitude: lat,
       longitude: lon,
       idempotency_key: crypto.randomUUID(),
-      reporter_name: user ? user.name : 'Field Officer'
+      reporter_name: user ? user.name : 'Field Officer',
+      media_data_url: mediaDataUrl
     };
 
     // If offline, save into IndexedDB queue
     if (!navigator.onLine) {
       try {
-        await queueOfflineReport({ ...reportData, mediaFile });
+        await queueOfflineReport({ ...reportData, mediaFile, media_data_url: mediaDataUrl });
         setStatusFeedback('Offline Mode: Report stored securely in local IndexedDB queue.');
         refreshPendingCount();
         setDescription('');
@@ -119,6 +131,9 @@ export default function FieldOfficerApp({ regions = [], alerts = [], onReportSub
       formData.append('latitude', lat);
       formData.append('longitude', lon);
       formData.append('idempotency_key', reportData.idempotency_key);
+      if (mediaDataUrl) {
+        formData.append('media_data_url', mediaDataUrl);
+      }
       if (mediaFile) {
         formData.append('media', mediaFile);
       }
@@ -132,7 +147,7 @@ export default function FieldOfficerApp({ regions = [], alerts = [], onReportSub
       }
     } catch (err) {
       // Fallback to offline queue on network hiccup
-      await queueOfflineReport({ ...reportData, mediaFile });
+      await queueOfflineReport({ ...reportData, mediaFile, media_data_url: mediaDataUrl });
       setStatusFeedback('Transmission interrupted. Queued in IndexedDB for auto-sync.');
       refreshPendingCount();
     } finally {

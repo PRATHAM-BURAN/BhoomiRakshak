@@ -90,6 +90,9 @@ export async function syncOfflineQueue(token) {
       formData.append('created_offline', 'true');
       formData.append('client_created_at', item.client_created_at);
 
+      if (item.media_data_url) {
+        formData.append('media_data_url', item.media_data_url);
+      }
       if (item.mediaFile) {
         formData.append('media', item.mediaFile);
       } else if (item.media_url) {

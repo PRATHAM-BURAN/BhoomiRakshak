@@ -24,6 +24,8 @@ import FieldOfficerApp from './views/FieldOfficerApp';
 import AnalyticsView from './views/AnalyticsView';
 import SystemSettings from './views/SystemSettings';
 import LoginModal from './views/LoginModal';
+import HistoricalAnalysisView from './views/HistoricalAnalysisView';
+import staticLandslides from './data/historicalLandslides.json';
 
 export default function App() {
   const { user, role } = useAuth();
@@ -35,11 +37,11 @@ export default function App() {
       return view || 'dashboard';
     }
     if (userRole === 'field_officer') {
-      const allowed = ['field-officer', 'gis-map', 'citizen', 'reports-review'];
+      const allowed = ['field-officer', 'gis-map', 'citizen', 'reports-review', 'historical-analysis'];
       return allowed.includes(view) ? view : 'field-officer';
     }
     // citizen or guest/unauthenticated
-    const citizenAllowed = ['citizen', 'gis-map'];
+    const citizenAllowed = ['citizen', 'gis-map', 'historical-analysis'];
     return citizenAllowed.includes(view) ? view : 'citizen';
   }, []);
 
@@ -53,7 +55,7 @@ export default function App() {
   const [reports, setReports] = useState([]);
   const [riskZones, setRiskZones] = useState([]);
   const [analytics, setAnalytics] = useState(null);
-  const [historicalLandslides, setHistoricalLandslides] = useState([]);
+  const [historicalLandslides, setHistoricalLandslides] = useState(staticLandslides || []);
 
   // Modals
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -125,11 +127,11 @@ export default function App() {
     }
   }, [liveEvent]);
 
-  // Dual-channel Supabase Realtime Subscription (survives any WebSocket hiccups)
+  // Supabase real-time alerts fallback channel
   useEffect(() => {
     if (!supabase) return;
     const channel = supabase
-      .channel('app-alerts-live')
+      .channel('schema-db-changes')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'alerts' },
@@ -174,7 +176,7 @@ export default function App() {
       {/* 1. Global Offline & Auto-Sync Warning Banner */}
       <OfflineBanner />
 
-      {/* 2. Top Operational Command Header */}
+      {/* 2. Top Navigation Hub */}
       <Navbar
         currentView={currentView}
         setCurrentView={handleViewChange}
@@ -202,31 +204,29 @@ export default function App() {
         </div>
       )}
 
-      {/* 4. App Body: Desktop Left Rail + Fluid Workspace */}
+      {/* 3. Main Operational Dashboard Body with Dynamic Sidebar */}
       <div className="flex flex-1 w-full max-w-full overflow-hidden">
-        {/* Pinned dark navigation rail (strictly hidden for citizens and guests) */}
+        {/* Sidebar visible for Admin & Field Officers (excluding pure citizen or field-officer views) */}
         {(role === 'admin' || role === 'field_officer') && currentView !== 'citizen' && currentView !== 'field-officer' && (
           <Sidebar
             currentView={currentView}
             setCurrentView={handleViewChange}
-            alertCount={alerts.length}
+            alertCount={alerts.filter(a => a.severity === 'HIGH' || a.severity === 'CRITICAL').length}
             reportCount={reports.filter(r => r.status === 'pending').length}
           />
         )}
 
-        {/* Main Dynamic Viewport with Strict Role Protection */}
-        <main className="flex-1 min-w-0 max-w-full overflow-y-auto bg-surface">
+        <main className="flex-1 w-full overflow-y-auto bg-surface-container-lowest">
           {currentView === 'dashboard' && role === 'admin' && (
             <AdminDashboard
-              analytics={analytics}
+              regions={regions}
               alerts={alerts}
               reports={reports}
-              regions={regions}
               riskZones={riskZones}
+              analytics={analytics}
               historicalLandslides={historicalLandslides}
               setCurrentView={handleViewChange}
               onOpenBroadcastModal={() => setCurrentView('alerts-console')}
-              onOpenAddRegionModal={() => setShowAddRegionModal(true)}
             />
           )}
 
@@ -240,11 +240,18 @@ export default function App() {
             />
           )}
 
+          {currentView === 'historical-analysis' && (
+            <HistoricalAnalysisView
+              historicalLandslides={historicalLandslides}
+              regions={regions}
+            />
+          )}
+
           {currentView === 'alerts-console' && role === 'admin' && (
             <AlertsConsole
-              alerts={alerts}
               regions={regions}
-              onAlertBroadcasted={(newAlert) => {
+              alerts={alerts}
+              onAlertCreated={(newAlert) => {
                 setAlerts(prev => [newAlert, ...prev]);
                 fetchData();
               }}
@@ -254,8 +261,8 @@ export default function App() {
           {currentView === 'reports-review' && (role === 'admin' || role === 'field_officer') && (
             <FieldReportsReview
               reports={reports}
-              onReportUpdated={(updated) => {
-                setReports(prev => prev.map(r => r.id === updated.id ? updated : r));
+              onReportUpdated={(updatedRep) => {
+                setReports(prev => prev.map(r => r.id === updatedRep.id ? updatedRep : r));
                 fetchData();
               }}
               setCurrentView={handleViewChange}

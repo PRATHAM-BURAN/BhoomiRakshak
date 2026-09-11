@@ -401,13 +401,23 @@ export default function AdminDashboard({
                   NASA COOLR Ground Truth ({historicalLandslides.length})
                 </h3>
               </div>
-              <button
-                onClick={() => setCurrentView('gis-map')}
-                className="text-xs font-bold text-amber-700 hover:underline flex items-center gap-1"
-              >
-                <span>Inspect on Map</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentView('historical-analysis')}
+                  className="text-xs font-bold text-indigo-700 hover:underline flex items-center gap-1"
+                >
+                  <span>Data Visualizations</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+                <span className="text-outline-variant/60">•</span>
+                <button
+                  onClick={() => setCurrentView('gis-map')}
+                  className="text-xs font-bold text-amber-700 hover:underline flex items-center gap-1"
+                >
+                  <span>Inspect on Map</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
             </div>
 
             {historicalLandslides.length === 0 ? (
@@ -423,10 +433,10 @@ export default function AdminDashboard({
                       <span className="text-[10px] text-amber-800">{ls.trigger || ls.landslide_type} ({ls.event_date})</span>
                     </div>
                     <button
-                      onClick={() => setCurrentView('gis-map')}
-                      className="px-2 py-0.5 bg-white text-[11px] font-bold text-amber-900 rounded border border-amber-300 hover:bg-amber-100 transition-colors"
+                      onClick={() => setCurrentView('historical-analysis')}
+                      className="px-2 py-0.5 bg-white text-[11px] font-bold text-indigo-900 rounded border border-indigo-300 hover:bg-indigo-50 transition-colors"
                     >
-                      View
+                      Analyze
                     </button>
                   </div>
                 ))}

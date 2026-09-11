@@ -8,7 +8,8 @@ import {
   BarChart3, 
   Settings, 
   Shield, 
-  Radio
+  Radio,
+  History
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -18,6 +19,13 @@ export default function Sidebar({ currentView, setCurrentView, alertCount = 0, r
   const navItems = role === 'admin' ? [
     { id: 'dashboard', label: 'Dashboard Home', icon: LayoutDashboard },
     { id: 'gis-map', label: 'GIS Risk Map', icon: Map },
+    { 
+      id: 'historical-analysis', 
+      label: 'Historical Analysis', 
+      icon: History,
+      badge: '1,094 EVENTS',
+      badgeColor: 'bg-indigo-600 text-white'
+    },
     { 
       id: 'alerts-console', 
       label: 'Alerts Console', 
@@ -38,6 +46,13 @@ export default function Sidebar({ currentView, setCurrentView, alertCount = 0, r
   ] : [
     { id: 'field-officer', label: 'Field Operations', icon: Radio },
     { id: 'gis-map', label: 'GIS Risk Map', icon: Map },
+    { 
+      id: 'historical-analysis', 
+      label: 'Historical Analysis', 
+      icon: History,
+      badge: '1,094 EVENTS',
+      badgeColor: 'bg-indigo-600 text-white'
+    },
     { 
       id: 'reports-review', 
       label: 'Field Reports Review', 

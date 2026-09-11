@@ -104,10 +104,18 @@ router.post('/', optionalAuth, upload.single('media'), async (req, res) => {
       return res.status(400).json({ error: 'Valid GPS latitude and longitude coordinates are required.' });
     }
 
-    // Media file path if uploaded
+    // Media file path / Base64 Data URL
     let media_url = null;
-    if (req.file) {
-      media_url = `/uploads/${req.file.filename}`;
+    if (req.body.media_data_url && req.body.media_data_url.startsWith('data:')) {
+      media_url = req.body.media_data_url;
+    } else if (req.file) {
+      try {
+        const fileBuf = fs.readFileSync(req.file.path);
+        const mime = req.file.mimetype || 'image/jpeg';
+        media_url = `data:${mime};base64,${fileBuf.toString('base64')}`;
+      } catch (fErr) {
+        media_url = `/uploads/${req.file.filename}`;
+      }
     } else if (req.body.media_url) {
       media_url = req.body.media_url;
     }

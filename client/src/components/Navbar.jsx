@@ -137,7 +137,9 @@ export default function Navbar({
             >
               <option value="dashboard" className="text-gray-900">Admin Command Deck</option>
               <option value="gis-map" className="text-gray-900">GIS Risk Map</option>
+              <option value="historical-analysis" className="text-gray-900">Historical Geospatial Analysis</option>
               <option value="alerts-console" className="text-gray-900">Alerts Broadcast</option>
+              <option value="reports-review" className="text-gray-900">Field Reports Review</option>
               <option value="field-officer" className="text-gray-900">Field Officer Mode</option>
               <option value="citizen" className="text-gray-900">Citizen Warning Feed</option>
             </select>
@@ -152,6 +154,8 @@ export default function Navbar({
             >
               <option value="field-officer" className="text-gray-900">Field Officer Portal</option>
               <option value="gis-map" className="text-gray-900">GIS Risk Map</option>
+              <option value="historical-analysis" className="text-gray-900">Historical Analysis</option>
+              <option value="reports-review" className="text-gray-900">Field Reports Review</option>
               <option value="citizen" className="text-gray-900">Citizen Warning Feed</option>
             </select>
           </div>
@@ -160,12 +164,13 @@ export default function Navbar({
           <div className="hidden md:flex relative items-center bg-slate-800 text-white px-2.5 py-1 rounded text-xs font-semibold shadow-sm whitespace-nowrap shrink-0">
             <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-emerald-400 shrink-0" />
             <select
-              value={currentView === 'gis-map' ? 'gis-map' : 'citizen'}
+              value={currentView === 'gis-map' ? 'gis-map' : (currentView === 'historical-analysis' ? 'historical-analysis' : 'citizen')}
               onChange={(e) => setCurrentView(e.target.value)}
               className="bg-transparent text-white font-semibold text-xs focus:outline-none cursor-pointer"
             >
               <option value="citizen" className="text-gray-900">Community Citizen Portal</option>
               <option value="gis-map" className="text-gray-900">Public GIS Risk Map</option>
+              <option value="historical-analysis" className="text-gray-900">Historical Landslide Trends</option>
             </select>
           </div>
         )}

@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useLanguage } from '../context/LanguageContext';
 import { queueOfflineReport } from '../utils/offlineQueue';
+import { compressImageToDataUrl } from '../utils/imageUtils';
 import { api } from '../api';
 import SmsVerificationCard from '../components/SmsVerificationCard';
 
@@ -149,6 +150,16 @@ export default function CitizenPortal({ regions = [], alerts = [], onReportSubmi
 
     setIsSubmitting(true);
 
+    // Compress image client-side to self-contained Base64 Data URL
+    let mediaDataUrl = null;
+    if (mediaFile) {
+      try {
+        mediaDataUrl = await compressImageToDataUrl(mediaFile);
+      } catch (cErr) {
+        console.warn('[CITIZEN IMAGE COMPRESSION]:', cErr.message);
+      }
+    }
+
     const primaryDistrict = selectedReportDistricts[0];
     const reportPayload = {
       region_id: primaryDistrict,
@@ -159,7 +170,8 @@ export default function CitizenPortal({ regions = [], alerts = [], onReportSubmi
       latitude: lat,
       longitude: lon,
       idempotency_key: crypto.randomUUID(),
-      reporter_name: user?.name || 'Community Citizen'
+      reporter_name: user?.name || 'Community Citizen',
+      media_data_url: mediaDataUrl
     };
 
     // If offline, store in IndexedDB queue
@@ -167,7 +179,8 @@ export default function CitizenPortal({ regions = [], alerts = [], onReportSubmi
       try {
         await queueOfflineReport({
           ...reportPayload,
-          mediaFile
+          mediaFile,
+          media_data_url: mediaDataUrl
         });
         setReportStatusMsg('Saved to local offline queue. Will auto-sync when network signal returns.');
         refreshPendingCount();
@@ -192,6 +205,9 @@ export default function CitizenPortal({ regions = [], alerts = [], onReportSubmi
       formData.append('latitude', lat);
       formData.append('longitude', lon);
       formData.append('idempotency_key', reportPayload.idempotency_key);
+      if (mediaDataUrl) {
+        formData.append('media_data_url', mediaDataUrl);
+      }
       if (mediaFile) {
         formData.append('media', mediaFile);
       }
@@ -204,7 +220,7 @@ export default function CitizenPortal({ regions = [], alerts = [], onReportSubmi
         onReportSubmitted(res.report);
       }
     } catch (err) {
-      await queueOfflineReport({ ...reportPayload, mediaFile });
+      await queueOfflineReport({ ...reportPayload, mediaFile, media_data_url: mediaDataUrl });
       setReportStatusMsg('Network transmission failed. Stored in local offline queue.');
       refreshPendingCount();
     } finally {

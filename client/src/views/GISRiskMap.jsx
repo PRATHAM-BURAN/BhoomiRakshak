@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import SeverityChip from '../components/SeverityChip';
 import EmptyState from '../components/EmptyState';
+import { resolveMediaUrl } from '../utils/imageUtils';
 
 // Fix standard Leaflet default marker icon paths in bundlers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -507,13 +508,19 @@ export default function GISRiskMap({
                   {selectedItem.data.description || 'No detailed remarks provided.'}
                 </p>
 
-                {selectedItem.data.media_url && (
+                {(selectedItem.data.media_data_url || selectedItem.data.media_url) && (
                   <div>
-                    <h5 className="font-bold text-[11px] mb-1">Ground Evidence:</h5>
+                    <h5 className="font-bold text-[11px] mb-1 text-on-surface flex items-center justify-between">
+                      <span>Ground Evidence:</span>
+                      <span className="text-[10px] font-mono text-primary font-bold">FIELD CAPTURE</span>
+                    </h5>
                     <img
-                      src={selectedItem.data.media_url}
+                      src={resolveMediaUrl(selectedItem.data.media_data_url || selectedItem.data.media_url)}
                       alt="Field evidence"
-                      className="w-full h-44 object-cover rounded border border-outline-variant/40"
+                      className="w-full h-44 object-cover rounded border border-outline-variant/40 shadow-sm"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                   </div>
                 )}
