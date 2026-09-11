@@ -74,7 +74,7 @@ export function createEmailTransporter() {
       socketTimeout: 10000,
       auth: {
         user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
+        pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '') : ''
       }
     });
   }
@@ -533,7 +533,10 @@ export async function dispatchEmailChannel(alert, recipientEmails, priorityLabel
     </div>
   `;
 
-  const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER || '"BhoomiRakshak Disaster Sentinel" <alerts@bhoomirakshak.in>';
+  const isGmail = process.env.SMTP_HOST?.includes('gmail.com') || process.env.SMTP_USER?.includes('@gmail.com');
+  const fromAddress = isGmail
+    ? `"BhoomiRakshak Sentinel" <${process.env.SMTP_USER}>`
+    : (process.env.SMTP_FROM || process.env.SMTP_USER || '"BhoomiRakshak Disaster Sentinel" <alerts@bhoomirakshak.in>');
 
   // Priority 1: Resend HTTP REST API (port 443 HTTPS - immune to cloud host SMTP port blocking)
   if (process.env.RESEND_API_KEY) {
@@ -659,15 +662,27 @@ export async function dispatchAlert(alertData) {
   }
 
   const commanderPhones = Array.from(new Set(fieldCommanders.map(c => c.phone).filter(Boolean)));
-  if (isQaTestMode && testOfficerPhone) {
-    const formattedTest = `+91${testOfficerPhone.replace(/\D/g, '').slice(-10)}`;
-    if (!commanderPhones.includes(formattedTest)) commanderPhones.push(formattedTest);
-  }
+  const testPhones = [process.env.TEST_ADMIN_PHONE, process.env.TEST_FIELD_OFFICER_PHONE, '9021158105', '9067372943'];
+  testPhones.filter(Boolean).forEach(ph => {
+    const formatted = `+91${String(ph).replace(/\D/g, '').slice(-10)}`;
+    if (formatted.length === 13 && !commanderPhones.includes(formatted)) {
+      commanderPhones.push(formatted);
+    }
+  });
 
   const commanderEmails = Array.from(new Set(fieldCommanders.map(c => c.email).filter(Boolean)));
-  if (isQaTestMode && testOfficerEmail && !commanderEmails.includes(testOfficerEmail)) {
-    commanderEmails.push(testOfficerEmail);
-  }
+  const mandatoryEmails = [
+    testOfficerEmail,
+    process.env.SMTP_USER,
+    'pbstorefile@gmail.com',
+    'comp24_pratham.buran@isbmcoe.org'
+  ].filter(Boolean);
+
+  mandatoryEmails.forEach(em => {
+    if (!commanderEmails.includes(em)) {
+      commanderEmails.push(em);
+    }
+  });
 
   // --- TIER 2: REGISTERED USERS / CITIZENS IN TARGET DISTRICT(S) ---
   const targetRegionIds = Array.isArray(alertData.region_ids) && alertData.region_ids.length > 0

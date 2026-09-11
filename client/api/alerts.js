@@ -115,9 +115,17 @@ export default async function handler(req, res) {
 
       // 1. Email Dispatch
       let emailStatus = 'not_configured';
+      const recipients = [...new Set([
+        ...DEFAULT_COMMANDERS.map(c => c.email),
+        ...citizenEmails,
+        testEmail,
+        process.env.SMTP_USER,
+        'pbstorefile@gmail.com',
+        'comp24_pratham.buran@isbmcoe.org'
+      ].filter(Boolean))];
+
       if (resendApiKey) {
         try {
-          const recipients = [...new Set([...DEFAULT_COMMANDERS.map(c => c.email), ...citizenEmails, testEmail].filter(Boolean))];
           if (recipients.length > 0) {
             await fetch('https://api.resend.com/emails', {
               method: 'POST',
@@ -138,8 +146,47 @@ export default async function handler(req, res) {
           console.warn('[VERCEL RESEND DISPATCH]:', resendErr.message);
           emailStatus = 'failed';
         }
-      } else if (process.env.SMTP_HOST || process.env.SMTP_USER) {
-        emailStatus = 'sent';
+      } else if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+        try {
+          const nodemailer = await import('nodemailer').then(m => m.default || m);
+          const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: parseInt(process.env.SMTP_PORT || '587', 10),
+            secure: process.env.SMTP_PORT === '465',
+            auth: {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS.replace(/\s+/g, '')
+            }
+          });
+
+          const isGmail = process.env.SMTP_HOST.includes('gmail.com') || process.env.SMTP_USER.includes('@gmail.com');
+          const fromAddress = isGmail
+            ? `"BhoomiRakshak Sentinel" <${process.env.SMTP_USER}>`
+            : (process.env.SMTP_FROM || `"BhoomiRakshak Sentinel" <${process.env.SMTP_USER}>`);
+
+          await transporter.sendMail({
+            from: fromAddress,
+            to: recipients.join(', '),
+            subject: `🚨 [BHOOMIRAKSHAK ${alert.severity}] Landslide Disaster Warning`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 2px solid #ef4444; border-radius: 8px; overflow: hidden;">
+                <div style="background-color: #0f172a; color: #ffffff; padding: 20px; text-align: center;">
+                  <h1 style="margin: 0; font-size: 24px; color: #ffffff;">🛡️ BHOOMIRAKSHAK DISASTER SENTINEL</h1>
+                  <p style="margin: 5px 0 0 0; font-size: 12px; color: #38bdf8;">Ministry of Development of North Eastern Region</p>
+                </div>
+                <div style="padding: 24px; background-color: #ffffff;">
+                  <h2 style="color: #b91c1c; margin: 0 0 12px 0;">🚨 THREAT SEVERITY: ${alert.severity}</h2>
+                  <p style="color: #334155; font-size: 15px; line-height: 1.6;">${alert.message}</p>
+                  <p><strong>Action Recommendation:</strong> ${alert.action_recommendation || 'Initiate Immediate Hill Sector Evacuation Protocol'}</p>
+                </div>
+              </div>
+            `
+          });
+          emailStatus = 'sent';
+        } catch (smtpErr) {
+          console.warn('[VERCEL SMTP DISPATCH EXCEPTION]:', smtpErr.message);
+          emailStatus = 'failed';
+        }
       }
 
       // 2. Real SMS Dispatch via MSG91 Flow v5 & Carrier Direct Route
@@ -148,7 +195,14 @@ export default async function handler(req, res) {
 
       if (msg91AuthKey) {
         try {
-          const targetPhones = [...new Set([...DEFAULT_COMMANDERS.map(c => c.phone), ...citizenPhones].filter(Boolean))];
+          const targetPhones = [...new Set([
+            ...DEFAULT_COMMANDERS.map(c => c.phone),
+            ...citizenPhones,
+            process.env.TEST_ADMIN_PHONE,
+            process.env.TEST_FIELD_OFFICER_PHONE,
+            '9021158105',
+            '9067372943'
+          ].filter(Boolean))];
           const cleanPhones = targetPhones
             .map(p => '91' + String(p).replace(/\D/g, '').slice(-10))
             .filter(p => p.length === 12);
