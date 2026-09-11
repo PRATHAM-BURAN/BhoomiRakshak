@@ -109,7 +109,7 @@ export default async function handler(req, res) {
       // Check configured email and SMS gateways
       // Check configured email and SMS gateways
       const msg91AuthKey = process.env.MSG91_AUTH_KEY || process.env.MSG91_API_KEY || '568789ADQJR3yfMO316a9f437eP1';
-      const msg91TemplateId = process.env.MSG91_TEMPLATE_ID || process.env.MSG91_OTP_TEMPLATE_ID || '68c148cbd6fc0538a719c8f3';
+      const msg91TemplateId = process.env.MSG91_TEMPLATE_ID || process.env.MSG91_OTP_TEMPLATE_ID || '6aa3d6fdde5ad702980d70f3';
       const resendApiKey = process.env.RESEND_API_KEY;
       const testEmail = process.env.SMTP_USER || process.env.TEST_ADMIN_EMAIL;
 

@@ -217,7 +217,7 @@ export async function dispatchSmsChannel(alert, recipientPhones) {
   const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
   const msg91AuthKey = process.env.MSG91_API_KEY || process.env.MSG91_AUTH_KEY || '568789ADQJR3yfMO316a9f437eP1';
   const msg91SenderId = process.env.MSG91_SENDER_ID || 'BHRKSH';
-  const msg91TemplateId = process.env.MSG91_TEMPLATE_ID || process.env.MSG91_OTP_TEMPLATE_ID || '68c148cbd6fc0538a719c8f3';
+  const msg91TemplateId = process.env.MSG91_TEMPLATE_ID || process.env.MSG91_OTP_TEMPLATE_ID || '6aa3d6fdde5ad702980d70f3';
 
   if (!twilioSid && !msg91AuthKey) {
     console.log('[ALERT DISPATCH] SMS Gateway not configured (missing MSG91_AUTH_KEY or Twilio credentials).');
