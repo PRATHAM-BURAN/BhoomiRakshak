@@ -273,8 +273,8 @@ router.get('/subscribers-count', optionalAuth, async (req, res) => {
       try {
         const { data: profiles, error: sbErr } = await supabase
           .from('profiles')
-          .select('id, role, region_id, phone, phone_verified, sms_enabled')
-          .eq('phone_verified', true)
+          .select('id, role, region_id, phone, sms_enabled')
+          .not('phone', 'is', null)
           .eq('sms_enabled', true);
 
         if (!sbErr && profiles) {
@@ -287,7 +287,7 @@ router.get('/subscribers-count', optionalAuth, async (req, res) => {
 
     // Merge or fallback to localDB
     if (allVerifiedUsers.length === 0) {
-      allVerifiedUsers = localUsers.filter(u => u.phone_verified === true && u.sms_enabled === true && u.is_active !== false);
+      allVerifiedUsers = localUsers.filter(u => u.phone && u.sms_enabled !== false && u.is_active !== false);
     }
 
     const byRegion = regions.map(r => {

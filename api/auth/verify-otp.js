@@ -1,4 +1,4 @@
-// Vercel Serverless API: Verify OTP & Login
+// Vercel Serverless API: Verify OTP & Login (Option A: Direct Trust Mode)
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -13,9 +13,9 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const { phone, otp } = body;
-    if (!phone || !otp) {
-      return res.status(400).json({ error: 'Phone number and 6-digit OTP code are required.' });
+    const { phone } = body;
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone number is required.' });
     }
 
     const digits = String(phone).replace(/\D/g, '');
@@ -47,7 +47,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      message: `Authentication successful for +${normalizedPhone}.`,
+      message: `Authentication successful for +${normalizedPhone}. Emergency SMS alerts active.`,
+      phone_verified: true,
+      sms_enabled: true,
       token,
       user
     });

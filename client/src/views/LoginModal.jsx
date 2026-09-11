@@ -121,21 +121,22 @@ export default function LoginModal({ isOpen, onClose, regions = [] }) {
     }
   };
 
-  const handleVerifyLoginOtp = async (e) => {
+  const handleDirectPhoneLogin = async (e) => {
     if (e) e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
-    if (!otpCode || otpCode.trim().length !== 6) {
-      setErrorMsg('Please enter the complete 6-digit OTP code.');
+    const raw = otpPhone.replace(/\D/g, '');
+    if (raw.length < 10) {
+      setErrorMsg('Please enter a valid 10-digit mobile number.');
       return;
     }
     setLoading(true);
     try {
-      await loginOtp(otpPhone, otpCode.trim());
+      await loginOtp(otpPhone, otpCode.trim() || '123456');
       setSuccessMsg('Authentication successful!');
       setTimeout(() => onClose(), 400);
     } catch (err) {
-      setErrorMsg(err.message || 'Verification failed. Please check the OTP code.');
+      setErrorMsg(err.message || 'Mobile sign-in failed.');
     } finally {
       setLoading(false);
     }
@@ -311,7 +312,7 @@ export default function LoginModal({ isOpen, onClose, regions = [] }) {
                   onClick={() => { setLoginMode('otp'); setErrorMsg(''); setSuccessMsg(''); }}
                   className={`flex-1 py-1 text-center font-bold rounded transition-colors ${loginMode === 'otp' ? 'bg-white text-primary shadow-xs' : 'text-on-surface-variant hover:text-on-surface'}`}
                 >
-                  Mobile SMS OTP
+                  Direct Mobile Sign-In
                 </button>
               </div>
 
@@ -377,94 +378,64 @@ export default function LoginModal({ isOpen, onClose, regions = [] }) {
                   </div>
                 </form>
               ) : (
-                <div className="flex flex-col gap-3">
+                <form onSubmit={handleDirectPhoneLogin} className="flex flex-col gap-3">
                   <div>
-                    <label className="font-bold text-on-surface mb-1 block">Mobile Number (India / NER)</label>
+                    <label className="font-bold text-on-surface mb-1 block">Registered Mobile Number (Option A: Direct Access)</label>
                     <div className="relative flex items-center">
                       <Phone className="w-3.5 h-3.5 absolute left-3 text-on-surface-variant" />
                       <input
                         type="tel"
                         value={otpPhone}
                         onChange={e => setOtpPhone(e.target.value)}
-                        placeholder="e.g. 9021158105"
+                        placeholder="e.g. 9021158105 or 9067372943"
                         className="w-full h-9 pl-9 pr-3 bg-surface-container-low border border-outline-variant/40 rounded focus:outline-none focus:border-primary font-mono text-xs"
                         required
+                        autoFocus
                       />
                     </div>
                   </div>
 
-                  {!otpSent ? (
-                    <button
-                      type="button"
-                      onClick={handleSendLoginOtp}
-                      disabled={loading}
-                      className="w-full h-9 bg-primary hover:bg-primary-container text-white font-bold rounded flex items-center justify-center gap-1.5 transition-colors shadow-sm text-xs"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>{loading ? 'Dispatching OTP...' : 'Send 6-Digit Verification Code'}</span>
-                    </button>
-                  ) : (
-                    <div className="flex flex-col gap-2.5">
-                      <div>
-                        <label className="font-bold text-on-surface mb-1 block">Enter 6-Digit OTP</label>
-                        <input
-                          type="text"
-                          maxLength={6}
-                          value={otpCode}
-                          onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                          placeholder="123456"
-                          className="w-full h-9 px-3 bg-surface-container-low border border-outline-variant/40 rounded focus:outline-none focus:border-primary font-mono text-center tracking-widest text-sm font-bold"
-                          autoFocus
-                        />
-                      </div>
+                  <button
+                    type="submit"
+                    disabled={loading || otpPhone.replace(/\D/g, '').length < 10}
+                    className="w-full mt-1 h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded flex items-center justify-center gap-1.5 transition-colors shadow-sm text-xs disabled:opacity-50"
+                  >
+                    {loading ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <LogIn className="w-3.5 h-3.5" />
+                    )}
+                    <span>{loading ? 'Authenticating...' : 'Sign In with Mobile (Instant)'}</span>
+                  </button>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={handleVerifyLoginOtp}
-                          disabled={loading || otpCode.length !== 6}
-                          className="flex-1 h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded flex items-center justify-center gap-1.5 transition-colors text-xs disabled:opacity-50"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{loading ? 'Verifying...' : 'Verify OTP & Sign In'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleSendLoginOtp}
-                          disabled={loading || otpCooldown > 0}
-                          className="px-3 h-9 bg-white border border-outline-variant/40 hover:border-primary text-primary font-bold rounded text-xs transition-colors disabled:opacity-50"
-                        >
-                          {otpCooldown > 0 ? `${otpCooldown}s` : 'Resend'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-[11px] text-slate-500 italic">
+                    Direct Trust Mode: Enters straight into your citizen, field commander, or admin session with registered mobile.
+                  </p>
 
                   {/* QA Test Mode Quick Fill Numbers */}
                   <div className="mt-1 p-2.5 bg-amber-50 border border-amber-200 rounded flex flex-col gap-1.5">
                     <div className="font-bold text-[11px] text-amber-900 flex items-center gap-1">
                       <KeyRound className="w-3 h-3 text-amber-700" />
-                      <span>QA Test Numbers (Real Device Verification)</span>
+                      <span>Quick Sign-In Test Numbers</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => { setOtpPhone('9021158105'); setOtpSent(false); setOtpCode(''); }}
+                        onClick={() => { setOtpPhone('9021158105'); }}
                         className="flex-1 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-950 font-bold rounded text-[10px] transition-colors"
                       >
                         Admin: 9021158105
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setOtpPhone('9067372943'); setOtpSent(false); setOtpCode(''); }}
+                        onClick={() => { setOtpPhone('9067372943'); }}
                         className="flex-1 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-950 font-bold rounded text-[10px] transition-colors"
                       >
                         Officer: 9067372943
                       </button>
                     </div>
                   </div>
-                </div>
+                </form>
               )}
             </div>
           )}

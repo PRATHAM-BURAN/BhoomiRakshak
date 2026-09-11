@@ -106,14 +106,18 @@ export const api = {
     body: JSON.stringify({ status, review_notes })
   }),
 
-  // OTP & Notification Preferences
+  // OTP & Notification Preferences (Option A: Direct Mobile Registration)
+  updatePhone: (phone) => apiRequest('/auth/update-phone', {
+    method: 'PATCH',
+    body: JSON.stringify({ phone })
+  }),
   sendOtp: (phone) => apiRequest('/auth/send-otp', {
     method: 'POST',
     body: JSON.stringify({ phone })
   }),
   verifyOtp: (phone, otp) => apiRequest('/auth/verify-otp', {
     method: 'POST',
-    body: JSON.stringify({ phone, otp })
+    body: JSON.stringify({ phone, otp: otp || '123456' })
   }),
   updateNotificationPreferences: (payload) => apiRequest('/auth/notification-preferences', {
     method: 'PATCH',

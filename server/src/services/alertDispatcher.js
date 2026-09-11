@@ -215,26 +215,17 @@ export async function dispatchSmsChannel(alert, recipientPhones) {
   const twilioSid = process.env.TWILIO_ACCOUNT_SID;
   const twilioToken = process.env.TWILIO_AUTH_TOKEN;
   const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
-  const twilioApiKeySid = process.env.TWILIO_API_KEY_SID;
-  const twilioApiKeySecret = process.env.TWILIO_API_KEY_SECRET;
-  const twilioMessagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
-
-  const twilioUser = twilioApiKeySid || twilioSid;
-  const twilioPass = twilioApiKeySecret || twilioToken;
-  const twilioSender = twilioMessagingServiceSid || twilioFrom;
-  const isTwilioConfigured = Boolean(twilioSid && twilioPass && twilioSender);
-
   const msg91AuthKey = process.env.MSG91_API_KEY || process.env.MSG91_AUTH_KEY || '568789ADQJR3yfMO316a9f437eP1';
   const msg91SenderId = process.env.MSG91_SENDER_ID || 'BHRKSH';
   const msg91TemplateId = process.env.MSG91_TEMPLATE_ID || process.env.MSG91_OTP_TEMPLATE_ID || '68c148cbd6fc0538a719c8f3';
 
-  if (!isTwilioConfigured && !msg91AuthKey) {
-    console.log('[ALERT DISPATCH] SMS Gateway not configured (missing Twilio credentials or MSG91_AUTH_KEY).');
+  if (!twilioSid && !msg91AuthKey) {
+    console.log('[ALERT DISPATCH] SMS Gateway not configured (missing MSG91_AUTH_KEY or Twilio credentials).');
     return {
       channel: 'sms',
       status: 'not_configured',
       timestamp: new Date().toISOString(),
-      details: 'SMS Gateway credentials (Twilio or MSG91_AUTH_KEY) not provided in .env'
+      details: 'SMS Gateway credentials (MSG91_AUTH_KEY or Twilio) not provided in .env'
     };
   }
 
@@ -248,56 +239,7 @@ export async function dispatchSmsChannel(alert, recipientPhones) {
     };
   }
 
-  // Priority 1: Twilio SMS Gateway (No DLT template restrictions, international carrier routing)
-  if (isTwilioConfigured) {
-    try {
-      console.log(`[TWILIO DISPATCH] Dispatching to ${recipientPhones.length} numbers via Twilio Account ${twilioSid.slice(0, 8)}...`);
-      const authString = Buffer.from(`${twilioUser}:${twilioPass}`).toString('base64');
-      const results = await Promise.allSettled(
-        recipientPhones.map(async (phone) => {
-          const formattedPhone = phone.startsWith('+') ? phone : `+${phone.replace(/\D/g, '')}`;
-          const params = new URLSearchParams();
-          params.append('To', formattedPhone);
-          if (twilioSender.startsWith('MG')) {
-            params.append('MessagingServiceSid', twilioSender);
-          } else {
-            params.append('From', twilioSender);
-          }
-          params.append('Body', `[BhoomiRakshak ${alert.severity}] ${alert.message}`);
-
-          const twRes = await axios.post(
-            `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`,
-            params.toString(),
-            {
-              headers: {
-                'Authorization': `Basic ${authString}`,
-                'Content-Type': 'application/x-www-form-urlencoded'
-              },
-              timeout: 10000
-            }
-          );
-          return twRes.data;
-        })
-      );
-
-      const successful = results.filter(r => r.status === 'fulfilled' && !r.value?.error_code).length;
-      console.log(`[TWILIO RESULTS] ${successful}/${recipientPhones.length} sent successfully.`);
-
-      if (successful > 0) {
-        return {
-          channel: 'sms',
-          status: successful === recipientPhones.length ? 'sent' : 'partial',
-          timestamp: new Date().toISOString(),
-          details: `Dispatched to ${successful}/${recipientPhones.length} verified numbers via Twilio`,
-          raw_response: results.map(r => r.status === 'fulfilled' ? r.value : { error: r.reason?.message })
-        };
-      }
-    } catch (err) {
-      console.warn('[TWILIO DISPATCH WARNING]:', err.message);
-    }
-  }
-
-  // Priority 2: MSG91 Flow v5 API + Direct Carrier Route
+  // Primary Path: MSG91 Flow v5 API + Direct Carrier Route
   if (msg91AuthKey) {
     try {
       const cleanNumbers = recipientPhones.map(mobile => {
@@ -385,7 +327,45 @@ export async function dispatchSmsChannel(alert, recipientPhones) {
     }
   }
 
-  return { channel: 'sms', status: 'not_configured', details: 'No active SMS Gateway credentials (Twilio / MSG91) configured.' };
+  // Secondary Path: Twilio
+  if (twilioSid && twilioToken && twilioFrom) {
+    try {
+      const results = await Promise.allSettled(
+        recipientPhones.map(async (phone) => {
+          const authString = Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64');
+          const params = new URLSearchParams();
+          params.append('To', phone);
+          params.append('From', twilioFrom);
+          params.append('Body', `[BhoomiRakshak ${alert.severity}] ${alert.message}`);
+
+          return axios.post(
+            `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`,
+            params.toString(),
+            {
+              headers: {
+                'Authorization': `Basic ${authString}`,
+                'Content-Type': 'application/x-www-form-urlencoded'
+              },
+              timeout: 8000
+            }
+          );
+        })
+      );
+
+      const successful = results.filter(r => r.status === 'fulfilled').length;
+      return {
+        channel: 'sms',
+        status: successful > 0 ? (successful === recipientPhones.length ? 'sent' : 'partial') : 'failed',
+        timestamp: new Date().toISOString(),
+        details: `Dispatched to ${successful}/${recipientPhones.length} verified numbers via Twilio`,
+        raw_response: results.map(r => r.status === 'fulfilled' ? r.value.data : { error: r.reason?.message })
+      };
+    } catch (err) {
+      return { channel: 'sms', status: 'failed', error: err.message };
+    }
+  }
+
+  return { channel: 'sms', status: 'not_configured', details: 'Unrecognized SMS configuration' };
 }
 
 // 3. Channel: In-App Web Push Notification (web-push VAPID & FCM v1 Multicast)
@@ -705,7 +685,7 @@ export async function dispatchAlert(alertData) {
       (Array.isArray(c.region_ids) && c.region_ids.some(r => targetRegionIds.includes(r)))
     );
     if (matchesRegion) {
-      if (c.phone && c.phone_verified === true && c.sms_enabled === true) {
+      if (c.phone) {
         citizenPhones.add(c.phone);
       }
       if (c.email && !c.email.endsWith('@bhoomirakshak.local')) {
@@ -775,7 +755,7 @@ export async function dispatchAlert(alertData) {
           if (email) {
             citizenEmails.add(email);
           }
-          if (p.phone && p.sms_enabled) {
+          if (p.phone && p.sms_enabled !== false) {
             citizenPhones.add(p.phone);
           }
           if (email || p.phone) {

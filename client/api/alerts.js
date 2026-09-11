@@ -142,67 +142,13 @@ export default async function handler(req, res) {
         emailStatus = 'sent';
       }
 
-      // 2. Real SMS Dispatch via Twilio (Priority 1) or MSG91 (Priority 2)
-      const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-      const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-      const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
-      const twilioApiKeySid = process.env.TWILIO_API_KEY_SID;
-      const twilioApiKeySecret = process.env.TWILIO_API_KEY_SECRET;
-      const twilioMessagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
-
-      const twilioUser = twilioApiKeySid || twilioSid;
-      const twilioPass = twilioApiKeySecret || twilioToken;
-      const twilioSender = twilioMessagingServiceSid || twilioFrom;
-      const isTwilioConfigured = Boolean(twilioSid && twilioPass && twilioSender);
-
+      // 2. Real SMS Dispatch via MSG91 Flow v5 & Carrier Direct Route
       let smsStatus = 'not_configured';
       let smsDeliveryDetails = null;
-      const targetPhones = [...new Set([...DEFAULT_COMMANDERS.map(c => c.phone), ...citizenPhones].filter(Boolean))];
 
-      // Priority 1: Twilio SMS Gateway
-      if (isTwilioConfigured && targetPhones.length > 0) {
+      if (msg91AuthKey) {
         try {
-          const authString = Buffer.from(`${twilioUser}:${twilioPass}`).toString('base64');
-          const twResults = await Promise.allSettled(targetPhones.map(async (phone) => {
-            const formatted = phone.startsWith('+') ? phone : `+${phone.replace(/\D/g, '')}`;
-            const params = new URLSearchParams();
-            params.append('To', formatted);
-            if (twilioSender.startsWith('MG')) {
-              params.append('MessagingServiceSid', twilioSender);
-            } else {
-              params.append('From', twilioSender);
-            }
-            params.append('Body', `[BhoomiRakshak ${alert.severity}] ${alert.message}`);
-
-            const twRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Basic ${authString}`,
-                'Content-Type': 'application/x-www-form-urlencoded'
-              },
-              body: params.toString()
-            });
-            return await twRes.json();
-          }));
-
-          const twSuccess = twResults.filter(r => r.status === 'fulfilled' && !r.value?.error_code).length;
-          console.log(`[VERCEL TWILIO DISPATCH] ${twSuccess}/${targetPhones.length} delivered.`);
-          if (twSuccess > 0) {
-            smsStatus = 'sent';
-            smsDeliveryDetails = {
-              provider: 'Twilio',
-              sent_count: twSuccess,
-              total: targetPhones.length
-            };
-          }
-        } catch (twErr) {
-          console.warn('[VERCEL TWILIO EXCEPTION]:', twErr.message);
-        }
-      }
-
-      // Priority 2: MSG91 Flow v5 & Carrier Direct Route
-      if (smsStatus !== 'sent' && msg91AuthKey) {
-        try {
+          const targetPhones = [...new Set([...DEFAULT_COMMANDERS.map(c => c.phone), ...citizenPhones].filter(Boolean))];
           const cleanPhones = targetPhones
             .map(p => '91' + String(p).replace(/\D/g, '').slice(-10))
             .filter(p => p.length === 12);
@@ -270,7 +216,6 @@ export default async function handler(req, res) {
             const isSuccess = (flowData && flowData.type !== 'error') || directSuccessCount > 0;
             smsStatus = isSuccess ? 'sent' : 'failed';
             smsDeliveryDetails = {
-              provider: 'MSG91',
               flow: flowData,
               carrier_direct_delivered: directSuccessCount,
               total_recipients: cleanPhones.length

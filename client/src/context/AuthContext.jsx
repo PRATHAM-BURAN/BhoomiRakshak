@@ -65,6 +65,8 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider
       value={{
         user,
+        setUser,
+        updateUser: (updatedData) => setUser(prev => prev ? ({ ...prev, ...updatedData }) : updatedData),
         role: user ? user.role : 'guest',
         isAuthenticated: Boolean(user),
         loading,
