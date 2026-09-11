@@ -29,18 +29,31 @@ For SMS OTP verification testing on real devices (powered by MSG91 SMS gateway):
 
 ## 2. The 8 Northeast India (NER) Field Masters / Sector Commanders
 
-Each Field Master is responsible for ground-truth slope telemetry, ground observation validation, and emergency evacuation dispatch in their assigned state corridor.
+Each Field Master is responsible for ground-truth slope telemetry, ground observation validation, and emergency evacuation dispatch in their assigned state corridor. All Field Master passwords are set to their 10-digit mobile number.
 
-| Sector # | State | Monitored Corridor / District | Officer Name | Login Identifier (Email) | Password | Assigned Region ID |
-| :---: | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1** | **Assam** | Dima Hasao (Haflong–Badarpur NH-27) | `Field Master 1` | `commander.assam@bhoomirakshak.gov.in` | `AssamCommander2026!` | `ad2a2d14-f0c0-42eb-ac4a-23a7a42abcf5` |
-| **2** | **Arunachal Pradesh** | Papum Pare (Itanagar NH-415) | `Field Master 2` | `commander.arunachal@bhoomirakshak.gov.in` | `ArunachalCommander2026!` | `b0000002-0000-0000-0000-000000000002` |
-| **3** | **Sikkim** | North Sikkim (Mangan Teesta Valley NH-10) | `Field Master 3` | `commander.sikkim@bhoomirakshak.gov.in` | `SikkimCommander2026!` | `b0000003-0000-0000-0000-000000000003` |
-| **4** | **Meghalaya** | East Khasi Hills (Shillong–Cherrapunji NH-6) | `Field Master 4` | `commander.meghalaya@bhoomirakshak.gov.in` | `MeghalayaCommander2026!` | `b0000004-0000-0000-0000-000000000004` |
-| **5** | **Mizoram** | Aizawl (Durtlang Ridge NH-54) | `Field Master 5` | `commander.mizoram@bhoomirakshak.gov.in` | `MizoramCommander2026!` | `b0000005-0000-0000-0000-000000000005` |
-| **6** | **Nagaland** | Kohima (Dimapur–Kohima NH-29) | `Field Master 6` | `commander.nagaland@bhoomirakshak.gov.in` | `NagalandCommander2026!` | `b0000006-0000-0000-0000-000000000006` |
-| **7** | **Manipur** | Senapati (Imphal Valley NH-2) | `Field Master 7` | `commander.manipur@bhoomirakshak.gov.in` | `ManipurCommander2026!` | `b0000007-0000-0000-0000-000000000007` |
-| **8** | **Tripura** | Dhalai (Ambassa–Manu NH-8) | `Field Master 8` | `commander.tripura@bhoomirakshak.gov.in` | `TripuraCommander2026!` | `b0000008-0000-0000-0000-000000000008` |
+| Sector # | State | Monitored Corridor / District | Officer Name | Mobile Number | Login Identifier (Email) | Password | Assigned Region ID |
+| :---: | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1** | **Assam** | Dima Hasao (Haflong–Badarpur NH-27) | `Kailas Sadashiv Mutkule` | `+91 9699721767` | `kailasmutkule99@gmail.com` | `9699721767` | `ad2a2d14-f0c0-42eb-ac4a-23a7a42abcf5` |
+| **2** | **Arunachal Pradesh** | Papum Pare (Itanagar NH-415) | `Adhishree Gajanan Sukalkar` | `+91 8010986532` | `adishreesukalkar53@gmail.com` | `8010986532` | `b0000002-0000-0000-0000-000000000002` |
+| **3** | **Sikkim** | North Sikkim (Mangan Teesta Valley NH-10) | `Harsh Umesh Hatti` | `+91 9518597050` | `harshhatti291@gmail.com` | `9518597050` | `b0000003-0000-0000-0000-000000000003` |
+| **4** | **Meghalaya** | East Khasi Hills (Shillong–Cherrapunji NH-6) | `Manav Ratan Agrawal` | `+91 8625816246` | `agrawalmanav83@gmail.com` | `8625816246` | `b0000004-0000-0000-0000-000000000004` |
+| **5** | **Mizoram** | Aizawl (Durtlang Ridge NH-54) | `Ritika Suresh Gogawale` | `+91 9623895456` | `ritikagogawale14@gmail.com` | `9623895456` | `b0000005-0000-0000-0000-000000000005` |
+| **6** | **Nagaland** | Kohima (Dimapur–Kohima NH-29) | `pratham prasad buran` | `+91 9067372943` | `comp24_pratham.buran@isbmcoe.org` | `9067372943` | `b0000006-0000-0000-0000-000000000006` |
+| **7** | **Manipur** | Senapati (Imphal Valley NH-2) | `Amar` | `+91 9922387625` | `comp24_amarnath.budhwat@isbmcoe.org` | `9922387625` | `b0000007-0000-0000-0000-000000000007` |
+| **8** | **Tripura** | Dhalai (Ambassa–Manu NH-8) | `sanskar mule` | `+91 8446222041` | `comp24_sanskar.mule@isbmcoe.org` | `8446222041` | `b0000008-0000-0000-0000-000000000008` |
+
+---
+
+## 3. Registered Community Citizens / Observers
+
+Registered citizens receive priority community landslide advisories and submit geo-tagged hazard observations. Passwords are set to their 10-digit mobile number.
+
+| Name | Role | Email | Mobile Number | Password | Assigned District |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `pb` | `citizen` | `pbstorefile@gmail.com` | `9021158105` | `9021158105` | Dima Hasao, Assam |
+| `Pratham Buran` | `citizen` | `prathamburan72pb@gmail.com` | `9067372943` | `9067372943` | Kohima, Nagaland |
+| `Kailas Mutkule` | `citizen` | `kailas@gmail.com` | `9699721767` | `9699721767` | Dima Hasao, Assam |
+| `Haflong Resident Observer` | `citizen` | `citizen.haflong@bhoomirakshak.gov.in` | `+91 9876543212` | `9876543212` | Dima Hasao, Assam |
 
 ---
 

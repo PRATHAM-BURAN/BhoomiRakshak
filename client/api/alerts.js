@@ -2,14 +2,14 @@
 import { createClient } from '@supabase/supabase-js';
 
 const DEFAULT_COMMANDERS = [
-  { id: "usr-cmdr-01-assam", name: "Field Master 1", state: "Assam", district: "Dima Hasao", phone: "+919876500001", email: "commander.assam@bhoomirakshak.gov.in" },
-  { id: "usr-cmdr-02-arunachal", name: "Field Master 2", state: "Arunachal Pradesh", district: "Papum Pare", phone: "+919876500002", email: "commander.arunachal@bhoomirakshak.gov.in" },
-  { id: "usr-cmdr-03-sikkim", name: "Field Master 3", state: "Sikkim", district: "North Sikkim", phone: "+919876500003", email: "commander.sikkim@bhoomirakshak.gov.in" },
-  { id: "usr-cmdr-04-meghalaya", name: "Field Master 4", state: "Meghalaya", district: "East Khasi Hills", phone: "+919876500004", email: "commander.meghalaya@bhoomirakshak.gov.in" },
-  { id: "usr-cmdr-05-mizoram", name: "Field Master 5", state: "Mizoram", district: "Aizawl", phone: "+919876500005", email: "commander.mizoram@bhoomirakshak.gov.in" },
-  { id: "usr-cmdr-06-nagaland", name: "Field Master 6", state: "Nagaland", district: "Kohima", phone: "+919876500006", email: "commander.nagaland@bhoomirakshak.gov.in" },
-  { id: "usr-cmdr-07-manipur", name: "Field Master 7", state: "Manipur", district: "Senapati", phone: "+919876500007", email: "commander.manipur@bhoomirakshak.gov.in" },
-  { id: "usr-cmdr-08-tripura", name: "Field Master 8", state: "Tripura", district: "Dhalai", phone: "+919876500008", email: "commander.tripura@bhoomirakshak.gov.in" }
+  { id: "c27053d1-d759-43e0-8f3e-a8e577211850", name: "Kailas Sadashiv Mutkule", state: "Assam", district: "Dima Hasao", phone: "+919699721767", email: "kailasmutkule99@gmail.com" },
+  { id: "830fdcf7-3f56-437f-a05c-e36c5bb4184e", name: "Adhishree Gajanan Sukalkar", state: "Arunachal Pradesh", district: "Papum Pare", phone: "+918010986532", email: "adishreesukalkar53@gmail.com" },
+  { id: "8cb33128-88c2-4b40-9842-4527f8e3e142", name: "Harsh Umesh Hatti", state: "Sikkim", district: "North Sikkim", phone: "+919518597050", email: "harshhatti291@gmail.com" },
+  { id: "76309451-5301-4bbe-934a-4ca5e99bd4d3", name: "Manav Ratan Agrawal", state: "Meghalaya", district: "East Khasi Hills", phone: "+918625816246", email: "agrawalmanav83@gmail.com" },
+  { id: "1d8cce73-2ed5-42a7-8119-89d04c2f1267", name: "Ritika Suresh Gogawale", state: "Mizoram", district: "Aizawl", phone: "+919623895456", email: "ritikagogawale14@gmail.com" },
+  { id: "870f9f21-413b-4830-b309-4393a90604fc", name: "pratham prasad buran", state: "Nagaland", district: "Kohima", phone: "+919067372943", email: "comp24_pratham.buran@isbmcoe.org" },
+  { id: "8725f1fb-33f0-41d3-989d-0fa380d91020", name: "Amar", state: "Manipur", district: "Senapati", phone: "+919922387625", email: "comp24_amarnath.budhwat@isbmcoe.org" },
+  { id: "7dacb6d4-fd59-4581-92a3-a864fc692d74", name: "sanskar mule", state: "Tripura", district: "Dhalai", phone: "+918446222041", email: "comp24_sanskar.mule@isbmcoe.org" }
 ];
 
 export default async function handler(req, res) {

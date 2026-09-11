@@ -625,19 +625,16 @@ export async function dispatchAlert(alertData) {
 
   const fieldCommanders = users.filter(u => u.role === 'field_officer' && u.is_active !== false);
 
-  const commanderPhones = Array.from(new Set(fieldCommanders.map(c => {
-    if (isQaTestMode && testOfficerPhone) {
-      return `+91${testOfficerPhone.replace(/\D/g, '').slice(-10)}`;
-    }
-    return c.phone;
-  }).filter(Boolean)));
+  const commanderPhones = Array.from(new Set(fieldCommanders.map(c => c.phone).filter(Boolean)));
+  if (isQaTestMode && testOfficerPhone) {
+    const formattedTest = `+91${testOfficerPhone.replace(/\D/g, '').slice(-10)}`;
+    if (!commanderPhones.includes(formattedTest)) commanderPhones.push(formattedTest);
+  }
 
-  const commanderEmails = Array.from(new Set(fieldCommanders.map(c => {
-    if (isQaTestMode && testOfficerEmail) {
-      return testOfficerEmail;
-    }
-    return c.email;
-  }).filter(Boolean)));
+  const commanderEmails = Array.from(new Set(fieldCommanders.map(c => c.email).filter(Boolean)));
+  if (isQaTestMode && testOfficerEmail && !commanderEmails.includes(testOfficerEmail)) {
+    commanderEmails.push(testOfficerEmail);
+  }
 
   // --- TIER 2: REGISTERED USERS / CITIZENS IN TARGET DISTRICT(S) ---
   const targetRegionIds = Array.isArray(alertData.region_ids) && alertData.region_ids.length > 0
@@ -830,21 +827,18 @@ export async function dispatchAlert(alertData) {
     priority_dispatch: {
       alert_id: alertData.id,
       severity: alertData.severity,
-      tier1_commanders: fieldCommanders.map(c => {
-        const email = (isQaTestMode && testOfficerEmail) ? testOfficerEmail : c.email;
-        return {
-          commander_id: c.id,
-          name: c.name,
-          district: c.district,
-          state: c.state,
-          phone: c.phone,
-          email: email,
-          sms_status: tier1SmsResult.status,
-          email_status: tier1EmailResult.status,
-          sms: tier1SmsResult.status,
-          email_delivery: tier1EmailResult.status
-        };
-      }),
+      tier1_commanders: fieldCommanders.map(c => ({
+        commander_id: c.id,
+        name: c.name,
+        district: c.district,
+        state: c.state,
+        phone: c.phone,
+        email: c.email,
+        sms_status: tier1SmsResult.status,
+        email_status: tier1EmailResult.status,
+        sms: tier1SmsResult.status,
+        email_delivery: tier1EmailResult.status
+      })),
       tier2_citizens: activeCitizens.map(c => ({
         user_id: c.id,
         name: c.name,
@@ -869,7 +863,7 @@ export async function dispatchAlert(alertData) {
           district: c.district,
           state: c.state,
           phone: c.phone,
-          email: (isQaTestMode && testOfficerEmail) ? testOfficerEmail : c.email
+          email: c.email
         })),
         sms_status: tier1SmsResult.status,
         email_status: tier1EmailResult.status
