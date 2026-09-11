@@ -19,8 +19,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://urthswyqlqbemubklhzx.supabase.co';
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVydGhzd3lxbHFiZW11YmtsaHp4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODgwMTc0NSwiZXhwIjoyMTA0Mzc3NzQ1fQ.ghmrcPkbziqdBJzaz3T3utmkeRINd1mNvgPR6qq1I9U';
   const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
   if (req.method === 'POST') {
@@ -40,65 +40,33 @@ export default async function handler(req, res) {
         created_at: new Date().toISOString()
       };
 
-      // Gather registered citizens from Supabase if configured
+      // Gather registered citizens from Supabase
       let registeredCitizens = [];
       let citizenEmails = [];
       let citizenPhones = [];
 
       if (supabase) {
         try {
-          let query = supabase.from('profiles').select('*').eq('role', 'citizen');
-          const isUuid = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-          let validUuidTargets = targetRegionIds.filter(isUuid);
+          const { data: authUsersData } = await supabase.auth.admin.listUsers();
+          const { data: profiles } = await supabase.from('profiles').select('*');
+          const profileMap = new Map((profiles || []).map(p => [p.id, p]));
 
-          if (validUuidTargets.length === 0 && targetRegionIds.length > 0 && !targetRegionIds.includes('all')) {
-            try {
-              const { data: allDbRegions } = await supabase.from('regions').select('id, name');
-              if (allDbRegions && allDbRegions.length > 0) {
-                targetRegionIds.forEach(slug => {
-                  const cleanedSlug = String(slug).replace(/^reg_/, '').replace(/[_-]/g, ' ').toLowerCase();
-                  const matched = allDbRegions.find(r => r.name.toLowerCase().includes(cleanedSlug));
-                  if (matched) validUuidTargets.push(matched.id);
+          if (authUsersData?.users) {
+            authUsersData.users.forEach(u => {
+              if (!u.email || u.email.endsWith('@bhoomirakshak.local')) return;
+              const p = profileMap.get(u.id);
+              const role = p?.role || u.user_metadata?.role || 'citizen';
+              if (role === 'citizen') {
+                if (u.email) citizenEmails.push(u.email);
+                if (p?.phone) citizenPhones.push(p.phone);
+                registeredCitizens.push({
+                  user_id: u.id,
+                  name: p?.full_name || u.user_metadata?.full_name || u.email.split('@')[0],
+                  district: p?.district || 'NER Monitored Sector',
+                  email: u.email,
+                  phone: p?.phone || null
                 });
               }
-            } catch (mapErr) {
-              console.warn('[VERCEL REGION MAP NOTICE]:', mapErr.message);
-            }
-          }
-
-          if (validUuidTargets.length === 1) {
-            query = query.eq('region_id', validUuidTargets[0]);
-          } else if (validUuidTargets.length > 1) {
-            query = query.in('region_id', validUuidTargets);
-          }
-
-          const { data: profiles } = await query;
-          if (profiles && profiles.length > 0) {
-            let authEmailMap = new Map();
-            try {
-              const { data: authUsers } = await supabase.auth.admin.listUsers();
-              if (authUsers?.users) {
-                authUsers.users.forEach(u => {
-                  if (u.id && u.email && !u.email.endsWith('@bhoomirakshak.local')) {
-                    authEmailMap.set(u.id, u.email);
-                  }
-                });
-              }
-            } catch (authErr) {
-              console.warn('[VERCEL AUTH ADMIN QUERY]:', authErr.message);
-            }
-
-            profiles.forEach(p => {
-              const email = authEmailMap.get(p.id) || p.email;
-              if (email) citizenEmails.push(email);
-              if (p.phone) citizenPhones.push(p.phone);
-              registeredCitizens.push({
-                user_id: p.id,
-                name: p.full_name || 'Registered Citizen',
-                district: p.district || 'NER Monitored Sector',
-                email: email || 'Registered Observer',
-                phone: p.phone || null
-              });
             });
           }
         } catch (sbErr) {
@@ -107,84 +75,148 @@ export default async function handler(req, res) {
       }
 
       // Check configured email and SMS gateways
-      // Check configured email and SMS gateways
       const msg91AuthKey = process.env.MSG91_AUTH_KEY || process.env.MSG91_API_KEY || '568789ADQJR3yfMO316a9f437eP1';
-      const msg91TemplateId = process.env.MSG91_TEMPLATE_ID || process.env.MSG91_OTP_TEMPLATE_ID || '6aa3d6fdde5ad702980d70f3';
+      const msg91TemplateId = process.env.MSG91_TEMPLATE_ID || process.env.MSG91_OTP_TEMPLATE_ID || '6aa4444eba892ab0f40d6323';
       const resendApiKey = process.env.RESEND_API_KEY;
       const testEmail = process.env.SMTP_USER || process.env.TEST_ADMIN_EMAIL;
 
       // 1. Email Dispatch
       let emailStatus = 'not_configured';
-      const recipients = [...new Set([
+      const allCandidateEmails = [
         ...DEFAULT_COMMANDERS.map(c => c.email),
         ...citizenEmails,
         testEmail,
         process.env.SMTP_USER,
         'pbstorefile@gmail.com',
+        'prathamb72official@gmail.com',
+        'prathamburan72pb@gmail.com',
+        'kailas@gmail.com',
         'comp24_pratham.buran@isbmcoe.org'
-      ].filter(Boolean))];
+      ].filter(Boolean);
 
-      if (resendApiKey) {
-        try {
-          if (recipients.length > 0) {
-            await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${resendApiKey}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                from: 'BhoomiRakshak Sentinel <onboarding@resend.dev>',
-                to: recipients,
-                subject: `[BHOOMIRAKSHAK ${alert.severity}] Landslide Warning`,
-                html: `<div style="font-family: Arial; padding: 20px;"><h2>🚨 ${alert.message}</h2><p>Severity: ${alert.severity}</p></div>`
-              })
-            });
-            emailStatus = 'sent';
-          }
-        } catch (resendErr) {
-          console.warn('[VERCEL RESEND DISPATCH]:', resendErr.message);
-          emailStatus = 'failed';
-        }
-      } else if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+      // Clean and deduplicate valid emails (filter out placeholder/unresolvable domains)
+      const validRecipients = [...new Set(allCandidateEmails)]
+        .map(e => e.trim().toLowerCase())
+        .filter(e => !e.endsWith('.gov.in') && !e.endsWith('.local') && e.includes('@') && e.includes('.'));
+
+      const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+      const smtpUser = process.env.SMTP_USER || 'pbstorefile@gmail.com';
+      const smtpPass = (process.env.SMTP_PASS || 'urwiryjqjayvceib').replace(/\s+/g, '');
+      const fromAddress = `"BhoomiRakshak Sentinel" <${smtpUser}>`;
+
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 2px solid #ef4444; border-radius: 8px; overflow: hidden;">
+          <div style="background-color: #0f172a; color: #ffffff; padding: 20px; text-align: center;">
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff;">🛡️ BHOOMIRAKSHAK DISASTER SENTINEL</h1>
+            <p style="margin: 5px 0 0 0; font-size: 12px; color: #38bdf8;">Ministry of Development of North Eastern Region</p>
+          </div>
+          <div style="padding: 24px; background-color: #ffffff;">
+            <h2 style="color: #b91c1c; margin: 0 0 12px 0;">🚨 THREAT SEVERITY: ${alert.severity}</h2>
+            <p style="color: #334155; font-size: 15px; line-height: 1.6;">${alert.message}</p>
+            <p><strong>Action Recommendation:</strong> ${alert.action_recommendation || 'Initiate Immediate Hill Sector Evacuation Protocol'}</p>
+            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
+            <p style="font-size: 12px; color: #64748b;">Dispatched to registered sector commanders & observers across monitored NE corridors.</p>
+          </div>
+        </div>
+      `;
+
+      let emailDispatched = false;
+
+      // Priority 1: Direct SSL SMTP (Port 465) - fast, secure, works across cloud serverless & local
+      if (smtpHost && smtpUser && smtpPass && validRecipients.length > 0) {
         try {
           const nodemailer = await import('nodemailer').then(m => m.default || m);
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: parseInt(process.env.SMTP_PORT || '587', 10),
-            secure: process.env.SMTP_PORT === '465',
+          const transporter465 = nodemailer.createTransport({
+            host: smtpHost,
+            port: 465,
+            secure: true,
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 20000,
             auth: {
-              user: process.env.SMTP_USER,
-              pass: process.env.SMTP_PASS.replace(/\s+/g, '')
+              user: smtpUser,
+              pass: smtpPass
             }
           });
 
-          const isGmail = process.env.SMTP_HOST.includes('gmail.com') || process.env.SMTP_USER.includes('@gmail.com');
-          const fromAddress = isGmail
-            ? `"BhoomiRakshak Sentinel" <${process.env.SMTP_USER}>`
-            : (process.env.SMTP_FROM || `"BhoomiRakshak Sentinel" <${process.env.SMTP_USER}>`);
-
-          await transporter.sendMail({
+          await transporter465.sendMail({
             from: fromAddress,
-            to: recipients.join(', '),
+            to: validRecipients.join(', '),
             subject: `🚨 [BHOOMIRAKSHAK ${alert.severity}] Landslide Disaster Warning`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 2px solid #ef4444; border-radius: 8px; overflow: hidden;">
-                <div style="background-color: #0f172a; color: #ffffff; padding: 20px; text-align: center;">
-                  <h1 style="margin: 0; font-size: 24px; color: #ffffff;">🛡️ BHOOMIRAKSHAK DISASTER SENTINEL</h1>
-                  <p style="margin: 5px 0 0 0; font-size: 12px; color: #38bdf8;">Ministry of Development of North Eastern Region</p>
-                </div>
-                <div style="padding: 24px; background-color: #ffffff;">
-                  <h2 style="color: #b91c1c; margin: 0 0 12px 0;">🚨 THREAT SEVERITY: ${alert.severity}</h2>
-                  <p style="color: #334155; font-size: 15px; line-height: 1.6;">${alert.message}</p>
-                  <p><strong>Action Recommendation:</strong> ${alert.action_recommendation || 'Initiate Immediate Hill Sector Evacuation Protocol'}</p>
-                </div>
-              </div>
-            `
+            html: emailHtml
           });
+
           emailStatus = 'sent';
-        } catch (smtpErr) {
-          console.warn('[VERCEL SMTP DISPATCH EXCEPTION]:', smtpErr.message);
+          emailDispatched = true;
+          console.log(`[SMTP 465 SUCCESS] Delivered to ${validRecipients.length} recipients via ${smtpHost}:465`);
+        } catch (smtpErr465) {
+          console.warn('[SMTP 465 NOTICE]:', smtpErr465.message);
+          // Fallback to Port 587 STARTTLS
+          try {
+            const nodemailer = await import('nodemailer').then(m => m.default || m);
+            const transporter587 = nodemailer.createTransport({
+              host: smtpHost,
+              port: 587,
+              secure: false,
+              connectionTimeout: 10000,
+              greetingTimeout: 10000,
+              socketTimeout: 20000,
+              auth: {
+                user: smtpUser,
+                pass: smtpPass
+              }
+            });
+
+            await transporter587.sendMail({
+              from: fromAddress,
+              to: validRecipients.join(', '),
+              subject: `🚨 [BHOOMIRAKSHAK ${alert.severity}] Landslide Disaster Warning`,
+              html: emailHtml
+            });
+
+            emailStatus = 'sent';
+            emailDispatched = true;
+            console.log(`[SMTP 587 SUCCESS] Delivered to ${validRecipients.length} recipients via ${smtpHost}:587`);
+          } catch (smtpErr587) {
+            console.warn('[SMTP 587 NOTICE]:', smtpErr587.message);
+          }
+        }
+      }
+
+      // Priority 2: Resend HTTP REST API Fallback
+      if (!emailDispatched && resendApiKey && validRecipients.length > 0) {
+        try {
+          const resendResults = await Promise.allSettled(
+            validRecipients.map(recipientEmail =>
+              fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${resendApiKey}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  from: 'BhoomiRakshak Sentinel <onboarding@resend.dev>',
+                  to: [recipientEmail],
+                  subject: `[BHOOMIRAKSHAK ${alert.severity}] Landslide Warning`,
+                  html: emailHtml
+                })
+              }).then(async r => {
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.message || `HTTP ${r.status}`);
+                return data;
+              })
+            )
+          );
+
+          const anySuccess = resendResults.some(r => r.status === 'fulfilled');
+          if (anySuccess) {
+            emailStatus = 'sent';
+            emailDispatched = true;
+          } else {
+            emailStatus = 'failed';
+          }
+        } catch (resendErr) {
+          console.warn('[VERCEL RESEND DISPATCH]:', resendErr.message);
           emailStatus = 'failed';
         }
       }
@@ -330,7 +362,7 @@ export default async function handler(req, res) {
       alert.channels_sent = [
         { channel: 'website', status: 'sent', details: 'Broadcast to active WebSockets' },
         { channel: 'sms', status: smsStatus, details: smsStatus === 'sent' ? `SMS dispatched via MSG91 to ${DEFAULT_COMMANDERS.length + citizenPhones.length} recipient(s)` : `SMS dispatch: ${smsStatus}` },
-        { channel: 'email', status: emailStatus, details: `Email: Tier 1 [${emailStatus}]` },
+        { channel: 'email', status: emailStatus, details: `Email: Tier 1 [${emailStatus}] + Tier 2 [${emailStatus}] delivered to ${validRecipients.length} address(es) via ${smtpHost}` },
         { channel: 'push', status: 'not_configured', details: 'FCM push not configured' }
       ];
 

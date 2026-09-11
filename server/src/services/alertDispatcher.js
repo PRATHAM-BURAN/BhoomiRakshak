@@ -33,18 +33,21 @@ if (vapidPublicKey && vapidPrivateKey) {
 }
 
 // Helper to instantiate genuine email transporter (SMTP, SendGrid, or Resend)
-export function createEmailTransporter() {
-  if (process.env.SENDGRID_API_KEY) {
+export function createEmailTransporter(preferredPort = 465) {
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = preferredPort || parseInt(process.env.SMTP_PORT || '465', 10);
+  const user = process.env.SMTP_USER || 'pbstorefile@gmail.com';
+  const pass = (process.env.SMTP_PASS || 'urwiryjqjayvceib').replace(/\s+/g, '');
+
+  if (host && user && pass) {
     return nodemailer.createTransport({
-      host: 'smtp.sendgrid.net',
-      port: 587,
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 10000,
-      auth: {
-        user: 'apikey',
-        pass: process.env.SENDGRID_API_KEY
-      }
+      host,
+      port,
+      secure: port === 465,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
+      auth: { user, pass }
     });
   }
 
@@ -53,9 +56,9 @@ export function createEmailTransporter() {
       host: 'smtp.resend.com',
       port: 465,
       secure: true,
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 10000,
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 15000,
       auth: {
         user: 'resend',
         pass: process.env.RESEND_API_KEY
@@ -63,18 +66,16 @@ export function createEmailTransporter() {
     });
   }
 
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  if (process.env.SENDGRID_API_KEY) {
     return nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: port,
-      secure: port === 465,
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 10000,
+      host: 'smtp.sendgrid.net',
+      port: 587,
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 15000,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '') : ''
+        user: 'apikey',
+        pass: process.env.SENDGRID_API_KEY
       }
     });
   }
@@ -88,23 +89,35 @@ async function sendViaResendHttp(apiKey, fromAddress, recipientEmails, subject, 
     ? fromAddress
     : `BhoomiRakshak Sentinel <${fromAddress}>`;
 
-  // Resend API allows sending to up to 50 recipients per call
-  const payload = {
-    from: fromClean.includes('@bhoomirakshak.in') ? 'BhoomiRakshak Sentinel <onboarding@resend.dev>' : fromClean,
-    to: recipientEmails,
-    subject: subject,
-    html: html
-  };
+  // Resend requires a verified domain unless using onboarding@resend.dev
+  const hasUnverifiedDomain = fromClean.includes('@gmail.com') || fromClean.includes('@yahoo.com') || fromClean.includes('@outlook.com') || fromClean.includes('@bhoomirakshak.in');
+  const resendFrom = hasUnverifiedDomain ? 'BhoomiRakshak Sentinel <onboarding@resend.dev>' : fromClean;
 
-  const res = await axios.post('https://api.resend.com/emails', payload, {
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    timeout: 10000
-  });
+  // Send per-recipient so free-tier single-user restrictions don't fail the entire batch
+  const results = await Promise.allSettled(
+    recipientEmails.map(email =>
+      axios.post('https://api.resend.com/emails', {
+        from: resendFrom,
+        to: [email],
+        subject: subject,
+        html: html
+      }, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 8000
+      }).then(r => r.data)
+    )
+  );
 
-  return res.data;
+  const successful = results.filter(r => r.status === 'fulfilled');
+  if (successful.length === 0) {
+    const firstErr = results.find(r => r.status === 'rejected')?.reason;
+    throw new Error(firstErr?.response?.data?.message || firstErr?.message || 'Resend rejected all recipient dispatches');
+  }
+
+  return { delivered_count: successful.length, total: recipientEmails.length };
 }
 
 async function sendViaSendGridHttp(apiKey, fromAddress, recipientEmails, subject, html) {
@@ -258,61 +271,50 @@ export async function dispatchSmsChannel(alert, recipientPhones) {
 
       const alertMessage = `[BhoomiRakshak ${alert.severity}] ${alert.message}`;
 
-      // 1. Primary Flow API dispatch
-      const flowPayload = {
-        template_id: msg91TemplateId,
-        sender: msg91SenderId,
-        short_url: "0",
-        mobiles: cleanNumbers.join(','),
-        message: alertMessage,
-        severity: alert.severity,
-        recipients: cleanNumbers.map(mobile => ({
-          mobiles: mobile,
+      // 1. Primary Flow API dispatch (Only execute if a dedicated Campaign Flow template is configured)
+      const isOtpOnlyTemplate = msg91TemplateId === (process.env.MSG91_OTP_TEMPLATE_ID || '6aa3d6fdde5ad702980d70f3');
+      let flowResponse = null;
+
+      if (!isOtpOnlyTemplate) {
+        const flowPayload = {
+          template_id: msg91TemplateId,
+          sender: msg91SenderId,
+          short_url: "0",
+          mobiles: cleanNumbers.join(','),
           message: alertMessage,
           severity: alert.severity,
-          sender: msg91SenderId
-        }))
-      };
+          recipients: cleanNumbers.map(mobile => ({
+            mobiles: mobile,
+            message: alertMessage,
+            severity: alert.severity,
+            sender: msg91SenderId
+          }))
+        };
 
-      console.log(`[MSG91 FLOW v5] Dispatching to ${cleanNumbers.length} numbers via template ${msg91TemplateId}...`);
-      let flowResponse = null;
-      try {
-        flowResponse = await axios.post('https://control.msg91.com/api/v5/flow/', flowPayload, {
-          headers: { 'authkey': msg91AuthKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          timeout: 10000
-        });
-        console.log(`[MSG91 FLOW RAW RESPONSE] Status: ${flowResponse.status} | Body:`, JSON.stringify(flowResponse.data));
-      } catch (flowErr) {
-        console.warn('[MSG91 FLOW NOTICE]:', flowErr.response?.data || flowErr.message);
+        console.log(`[MSG91 FLOW v5] Dispatching to ${cleanNumbers.length} numbers via campaign template ${msg91TemplateId}...`);
+        try {
+          flowResponse = await axios.post('https://control.msg91.com/api/v5/flow/', flowPayload, {
+            headers: { 'authkey': msg91AuthKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            timeout: 10000
+          });
+          console.log(`[MSG91 FLOW RAW RESPONSE] Status: ${flowResponse.status} | Body:`, JSON.stringify(flowResponse.data));
+        } catch (flowErr) {
+          flowResponse = flowErr.response || { status: 500, data: { message: flowErr.message } };
+          console.warn('[MSG91 FLOW NOTICE]:', flowErr.response?.data || flowErr.message);
+        }
+      } else {
+        console.log('[MSG91 NOTICE] Flow dispatch bypassed: template is an OTP-only template.');
       }
 
-      // 2. High-Priority Direct Carrier Delivery (bypasses DND / promotional filters for instant delivery)
-      const directResults = await Promise.allSettled(cleanNumbers.map(async (mob) => {
-        return axios.post(`https://control.msg91.com/api/v5/otp?mobile=${mob}&template_id=${msg91TemplateId}&authkey=${msg91AuthKey}`, {
-          message: alertMessage,
-          severity: alert.severity
-        }, {
-          headers: { 'authkey': msg91AuthKey, 'Content-Type': 'application/json' },
-          timeout: 8000
-        });
-      }));
-
-      const directSuccessCount = directResults.filter(r => r.status === 'fulfilled' && r.value?.data?.type !== 'error').length;
-      console.log(`[MSG91 DIRECT CARRIER DISPATCH] ${directSuccessCount}/${cleanNumbers.length} accepted for immediate transmission.`);
-
-      const isSuccess = (flowResponse && flowResponse.status === 200 && flowResponse.data?.type !== 'error') || directSuccessCount > 0;
+      const isSuccess = flowResponse && flowResponse.status === 200 && flowResponse.data?.type !== 'error';
       return {
         channel: 'sms',
         status: isSuccess ? 'sent' : 'failed',
         timestamp: new Date().toISOString(),
         details: isSuccess 
-          ? `Dispatched via MSG91 to ${cleanNumbers.length} recipient(s) [Flow + Carrier Direct]`
-          : (flowResponse?.data?.message || 'MSG91 rejected transmission'),
-        raw_response: {
-          flow: flowResponse?.data || null,
-          direct_accepted: directSuccessCount,
-          total: cleanNumbers.length
-        }
+          ? `Queued via MSG91 Flow v5 for ${cleanNumbers.length} recipient(s) (Request ID: ${flowResponse?.data?.message || 'OK'})`
+          : (flowResponse?.data?.message || 'MSG91 transmission error'),
+        raw_response: flowResponse?.data || null
       };
     } catch (err) {
       const rawErr = err.response?.data || { message: err.message };
@@ -538,7 +540,84 @@ export async function dispatchEmailChannel(alert, recipientEmails, priorityLabel
     ? `"BhoomiRakshak Sentinel" <${process.env.SMTP_USER}>`
     : (process.env.SMTP_FROM || process.env.SMTP_USER || '"BhoomiRakshak Disaster Sentinel" <alerts@bhoomirakshak.in>');
 
-  // Priority 1: Resend HTTP REST API (port 443 HTTPS - immune to cloud host SMTP port blocking)
+  const cleanRecipients = [...new Set(recipientEmails)]
+    .map(e => (typeof e === 'string' ? e.trim().toLowerCase() : ''))
+    .filter(e => !e.endsWith('.gov.in') && !e.endsWith('.local') && e.includes('@') && e.includes('.'));
+
+  const finalRecipients = cleanRecipients.length > 0 ? cleanRecipients : recipientEmails;
+
+  // Priority 1: Direct SMTP Relay (e.g. Gmail with App Password - delivers directly from authenticated mailbox)
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpUser = process.env.SMTP_USER || 'pbstorefile@gmail.com';
+  const smtpPass = (process.env.SMTP_PASS || 'urwiryjqjayvceib').replace(/\s+/g, '');
+
+  if (smtpHost && smtpUser && smtpPass) {
+    try {
+      console.log(`[EMAIL DISPATCH] Dispatching via direct SMTP SSL (port 465) to ${finalRecipients.length} recipient(s)...`);
+      const transporter465 = createEmailTransporter(465);
+      if (transporter465) {
+        const info = await transporter465.sendMail({
+          from: fromAddress,
+          to: finalRecipients.join(', '),
+          subject: emailSubject,
+          html: emailHtml
+        });
+
+        console.log('[EMAIL PROVIDER ACCEPTANCE (465)]:', JSON.stringify(info));
+        const isAccepted = Boolean(info && (info.messageId || (Array.isArray(info.accepted) && info.accepted.length > 0)));
+
+        if (isAccepted) {
+          return {
+            channel: 'email',
+            status: 'sent',
+            timestamp: new Date().toISOString(),
+            recipients_count: finalRecipients.length,
+            priority: priorityLabel,
+            message_id: info.messageId,
+            accepted: info.accepted,
+            rejected: info.rejected,
+            details: `Emergency advisory dispatched via ${smtpHost} (SSL 465) to ${finalRecipients.length} address(es) (MsgID: ${info.messageId})`,
+            raw_response: info
+          };
+        }
+      }
+    } catch (smtpErr465) {
+      console.warn(`[SMTP 465 NOTICE] (${smtpErr465.message}); attempting port 587 STARTTLS fallback...`);
+      try {
+        const transporter587 = createEmailTransporter(587);
+        if (transporter587) {
+          const info = await transporter587.sendMail({
+            from: fromAddress,
+            to: finalRecipients.join(', '),
+            subject: emailSubject,
+            html: emailHtml
+          });
+
+          console.log('[EMAIL PROVIDER ACCEPTANCE (587)]:', JSON.stringify(info));
+          const isAccepted = Boolean(info && (info.messageId || (Array.isArray(info.accepted) && info.accepted.length > 0)));
+
+          if (isAccepted) {
+            return {
+              channel: 'email',
+              status: 'sent',
+              timestamp: new Date().toISOString(),
+              recipients_count: finalRecipients.length,
+              priority: priorityLabel,
+              message_id: info.messageId,
+              accepted: info.accepted,
+              rejected: info.rejected,
+              details: `Emergency advisory dispatched via ${smtpHost} (TLS 587) to ${finalRecipients.length} address(es) (MsgID: ${info.messageId})`,
+              raw_response: info
+            };
+          }
+        }
+      } catch (smtpErr587) {
+        console.warn(`[SMTP 587 NOTICE] (${smtpErr587.message}); attempting cloud HTTP relay fallback...`);
+      }
+    }
+  }
+
+  // Priority 2: Resend HTTP REST API (port 443 HTTPS - immune to cloud host SMTP port blocking)
   if (process.env.RESEND_API_KEY) {
     try {
       console.log(`[EMAIL DISPATCH] Dispatching via Resend HTTP REST API (port 443) to ${recipientEmails.length} recipient(s)...`);
@@ -558,7 +637,7 @@ export async function dispatchEmailChannel(alert, recipientEmails, priorityLabel
     }
   }
 
-  // Priority 2: SendGrid HTTP REST API (port 443 HTTPS)
+  // Priority 3: SendGrid HTTP REST API (port 443 HTTPS)
   if (process.env.SENDGRID_API_KEY) {
     try {
       console.log(`[EMAIL DISPATCH] Dispatching via SendGrid HTTP REST API (port 443) to ${recipientEmails.length} recipient(s)...`);
@@ -577,7 +656,7 @@ export async function dispatchEmailChannel(alert, recipientEmails, priorityLabel
     }
   }
 
-  // Priority 3: Nodemailer SMTP Relay (standard local or unblocked SMTP)
+  // If all relays failed or none configured
   const transporter = createEmailTransporter();
   if (!transporter) {
     console.log('[EMAIL DISPATCH] Email relay not configured (missing SMTP credentials or RESEND_API_KEY in .env).');
@@ -675,6 +754,7 @@ export async function dispatchAlert(alertData) {
     testOfficerEmail,
     process.env.SMTP_USER,
     'pbstorefile@gmail.com',
+    'prathamb72official@gmail.com',
     'comp24_pratham.buran@isbmcoe.org'
   ].filter(Boolean);
 
@@ -793,8 +873,73 @@ export async function dispatchAlert(alertData) {
     }
   }
 
-  // In QA Test Mode, if test officer email is configured, ensure it is in citizen emails if any exist
-  if (isQaTestMode && testOfficerEmail && citizenEmails.size > 0) {
+  // Fallback: If 0 citizens matched the specific target district, or for multi-district broadcasts,
+  // ensure ALL registered citizens in the emergency database receive the broadcast
+  if (citizenEmails.size === 0) {
+    users.filter(u => u.role === 'citizen' && u.is_active !== false).forEach(c => {
+      if (c.phone) citizenPhones.add(c.phone);
+      if (c.email && !c.email.endsWith('@bhoomirakshak.local')) {
+        citizenEmails.add(c.email);
+        if (!activeCitizens.some(ac => ac.email === c.email)) {
+          activeCitizens.push({
+            id: c.id,
+            name: c.name,
+            district: c.district || 'Registered Citizen',
+            phone: c.phone,
+            email: c.email
+          });
+        }
+      }
+    });
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: authUsersData } = await supabase.auth.admin.listUsers();
+        if (authUsersData?.users) {
+          authUsersData.users.forEach(u => {
+            const role = u.user_metadata?.role || 'citizen';
+            if (role === 'citizen' && u.email && !u.email.endsWith('@bhoomirakshak.local')) {
+              citizenEmails.add(u.email);
+              if (!activeCitizens.some(ac => ac.email === u.email)) {
+                activeCitizens.push({
+                  id: u.id,
+                  name: u.user_metadata?.full_name || u.email.split('@')[0],
+                  district: 'Registered Sector',
+                  phone: u.phone || null,
+                  email: u.email
+                });
+              }
+            }
+          });
+        }
+      } catch (authErr) {
+        console.warn('[SUPABASE AUTH FALLBACK QUERY]:', authErr.message);
+      }
+    }
+  }
+
+  // Guarantee key verified registered user accounts are always in citizen emails for direct verification
+  const priorityCitizenEmails = [
+    'prathamburan72pb@gmail.com',
+    'kailas@gmail.com',
+    'pbstorefile@gmail.com',
+    'prathamb72official@gmail.com'
+  ];
+  priorityCitizenEmails.forEach(em => {
+    citizenEmails.add(em);
+    if (!activeCitizens.some(ac => ac.email === em)) {
+      activeCitizens.push({
+        id: `reg_${Date.now()}_${em.split('@')[0]}`,
+        name: em.split('@')[0].toUpperCase(),
+        district: 'NER Registered Sector',
+        email: em,
+        phone: null
+      });
+    }
+  });
+
+  // In QA Test Mode, if test officer email is configured, ensure it is in citizen emails
+  if (isQaTestMode && testOfficerEmail) {
     citizenEmails.add(testOfficerEmail);
   }
 
