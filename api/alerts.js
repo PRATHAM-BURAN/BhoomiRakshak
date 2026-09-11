@@ -48,10 +48,28 @@ export default async function handler(req, res) {
       if (supabase) {
         try {
           let query = supabase.from('profiles').select('*').eq('role', 'citizen');
-          if (targetRegionIds.length === 1) {
-            query = query.eq('region_id', targetRegionIds[0]);
-          } else if (targetRegionIds.length > 1) {
-            query = query.in('region_id', targetRegionIds);
+          const isUuid = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+          let validUuidTargets = targetRegionIds.filter(isUuid);
+
+          if (validUuidTargets.length === 0 && targetRegionIds.length > 0 && !targetRegionIds.includes('all')) {
+            try {
+              const { data: allDbRegions } = await supabase.from('regions').select('id, name');
+              if (allDbRegions && allDbRegions.length > 0) {
+                targetRegionIds.forEach(slug => {
+                  const cleanedSlug = String(slug).replace(/^reg_/, '').replace(/[_-]/g, ' ').toLowerCase();
+                  const matched = allDbRegions.find(r => r.name.toLowerCase().includes(cleanedSlug));
+                  if (matched) validUuidTargets.push(matched.id);
+                });
+              }
+            } catch (mapErr) {
+              console.warn('[VERCEL REGION MAP NOTICE]:', mapErr.message);
+            }
+          }
+
+          if (validUuidTargets.length === 1) {
+            query = query.eq('region_id', validUuidTargets[0]);
+          } else if (validUuidTargets.length > 1) {
+            query = query.in('region_id', validUuidTargets);
           }
 
           const { data: profiles } = await query;
